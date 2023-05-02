@@ -1,2 +1,2 @@
 # Plantt-Microcontrollers
- Repo for Plantt-Sensor and Plantt-Hub
+ Repo for Plantt-Sensor and Plantt-Hub using PLATFORMIO
