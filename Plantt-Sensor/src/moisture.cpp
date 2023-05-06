@@ -2,7 +2,7 @@
 
 /// @brief Reads the Moisture and convert it to percentage with the calibrated values.
 /// @return The median values as persentage
-uint16_t getMoisturePercentage(int soilPin, int waterValue, int airValue, int numberOfSamples) {
+uint16_t getMoisturePercentage(uint8_t soilPin, int waterValue, int airValue, int numberOfSamples) {
   uint16_t soilMoisture = 0;
   uint16_t reading = 0;
   for (int i = 1; i < numberOfSamples + 1; i++)
@@ -11,14 +11,16 @@ uint16_t getMoisturePercentage(int soilPin, int waterValue, int airValue, int nu
     soilMoisture += reading;
 
     PrintL(reading);
-    PrintLn("%");
+    PrintL("%");
+    PrintLn("");
 
     delay(1000);
   }
 
-  PrintLn("Total: ");
+  PrintLn("");
+  PrintL("Total: ");
   PrintL(soilMoisture / numberOfSamples);
-  PrintLn("%");
+  PrintL("%");
 
   return soilMoisture / numberOfSamples;
 }
