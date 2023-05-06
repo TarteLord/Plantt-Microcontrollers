@@ -10,9 +10,8 @@
 class Sensor
 {
 private:
-    // DHTesp* dht = new DHTesp; 
-    DHTesp dht; 
-    BH1750 lightMeter;
+    DHTesp* dht = new DHTesp;
+    BH1750* lightMeter = new BH1750(0x23);
 
     const int airValue = 2900;	// Sensor in mid air
     const int waterValue = 900; // Sensor in water

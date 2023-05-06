@@ -1,12 +1,12 @@
 #include "Sensor.h"
 
 /// @brief Initialise Sensor class and setup I2C etc.
-Sensor::Sensor() : lightMeter(0x23)
+Sensor::Sensor()
 {
     Wire.begin(GPIO_NUM_16, GPIO_NUM_17);
     
 
-    if (lightMeter.begin(BH1750::ONE_TIME_HIGH_RES_MODE))
+    if (lightMeter->begin(BH1750::ONE_TIME_HIGH_RES_MODE))
     {
         PrintLn(F("BH1750 Advanced begin"));
     }
@@ -15,17 +15,18 @@ Sensor::Sensor() : lightMeter(0x23)
         PrintLn(F("Error initialising BH1750"));
     }
     delay(1000);
-    dht.setup(dhtPin, DHTesp::DHT11);
+    dht->setup(dhtPin, DHTesp::DHT11);
 }
 
 /// @brief Deconstructor
 Sensor::~Sensor()
 {
-    lightMeter.~BH1750();
-    dht.~DHTesp();
+    lightMeter->~BH1750();
+    dht->~DHTesp();
 
-    //delete lightMeter;
-    //delete dht;
+    delete airValue;
+    delete lightMeter;
+    delete dht;
 }
 
 /// @brief Read soil moisture from sensor, mapped with "calibrated values".
@@ -38,6 +39,7 @@ int Sensor::ReadMoisture()
     result = map(analogRead(soilPin), waterValue, airValue, 100, 0);
     PrintLn("Soil Moisture: ");
     PrintL(result);
+    PrintLn("");
 
     return result;
 }
@@ -47,9 +49,9 @@ int Sensor::ReadMoisture()
 float Sensor::ReadLux()
 {
     float lux = 0.0F;
-    if (lightMeter.measurementReady())
+    if (lightMeter->measurementReady())
     {
-        lux = lightMeter.readLightLevel();
+        lux = lightMeter->readLightLevel();
         PrintLn("");
         PrintL("Light: ");
         PrintL(lux);
@@ -64,20 +66,20 @@ TempAndHumidity Sensor::ReadTempAndHumidity()
 {
     // Reading temperature for humidity takes about 250 milliseconds!
     // Sensor readings may also be up to 2 seconds 'old' (it's a very slow sensor)
-    TempAndHumidity values = dht.getTempAndHumidity();
+    TempAndHumidity values = dht->getTempAndHumidity();
     // Check if any reads failed and exit early (to try again).
-    if (dht.getStatus() != 0)
+    if (dht->getStatus() != 0)
     {
         PrintLn("DHT11 error status: ");
-        PrintL(dht.getStatusString());
+        PrintL(dht->getStatusString());
         values.humidity = 0.0F;
         values.temperature = 0.0F;
         return values;
     }
 
     PrintLn("");
-    PrintL("Temperature: ");
-    PrintL(values.temperature);
+    PrintLn("Temperature: ");
+    PrintLn(values.temperature);
     PrintLn("Humidity: ");
     PrintL(values.humidity);
 
