@@ -24,7 +24,6 @@ Sensor::~Sensor()
     lightMeter->~BH1750();
     dht->~DHTesp();
 
-    delete airValue;
     delete lightMeter;
     delete dht;
 }
