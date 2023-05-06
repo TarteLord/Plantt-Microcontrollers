@@ -2,12 +2,10 @@
 #include <Arduino.h>
 #include <BLEUtils.h>
 #include <BLEServer.h>
-// #include <DHTesp.h>
-// #include <BH1750.h>
-// #include <Wire.h>
-//#include "moisture.h"
+#include "driver/adc.h"
 #include "preprocessors.h"
 #include "sensor.h"
+#include <WiFi.h>
 
 // TODO: make more services for the different services
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
@@ -79,16 +77,22 @@ void printWakeupReason()
 	}
 }
 
-void hibernationWithRTC()
+void setModemSleep() {
+	btStop();
+	adc_power_off();
+    WiFi.disconnect(true);  // Disconnect from the network
+    WiFi.mode(WIFI_OFF);
+    setCpuFrequencyMhz(80);
+    // Use this if 40Mhz is not supported
+    // setCpuFrequencyMhz(40); //TODO: Try with this later, when the communication part is done.
+}
+
+void hibernation()
 {
-	/* 	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH,   ESP_PD_OPTION_ON);
-		esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF);
-		esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF);
-		esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL,         ESP_PD_OPTION_OFF); */
-	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_ON);
-	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_ON);
-	esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_ON);
+	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
+	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF);
+	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF);
+	esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_OFF);
 	esp_deep_sleep_start();
 }
 
@@ -107,7 +111,7 @@ void setup()
 	printWakeupReason();
 #endif
 
-	
+	setModemSleep();
 
 	// pinMode(buttonPin, INPUT_PULLUP);
 	pinMode(buttonPin, INPUT);
