@@ -2,52 +2,46 @@
 #include <Arduino.h>
 #include <BLEUtils.h>
 #include <BLEServer.h>
+#include <WiFi.h>
 #include "driver/adc.h"
 #include "preprocessors.h"
 #include "sensor.h"
-#include <WiFi.h>
 
 // TODO: make more services for the different services
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define CHARACTERISTICSSTRING_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
-#define CHARACTERISTICSONOFF_UUID "8d45ef7f-57b5-48f1-bf95-baf39be3442d"
+#define CHARACTERISTICS_TEMPERATURE_UUID 	"a3c0cf09-d1d8-421e-a3f8-e3d7dad17ba6"
+#define CHARACTERISTICS_HUMIDITY_UUID 		"46cb85fb-eb1e-4a21-b661-0a1d9478d302"
+#define CHARACTERISTICS_MOISTURE_UUID 		"beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define CHARACTERISTICS_LUX_UUID 			"1af7ac38-7aac-40ee-901f-942bd87f47b1"
+#define CHARACTERISTICS_SLEEP_UUID 			"8d45ef7f-57b5-48f1-bf95-baf39be3442d"
 
+BLECharacteristic *pCharacteristicTemperature;
+BLECharacteristic *pCharacteristicHumidity;
 BLECharacteristic *pCharacteristicMoisture;
-BLECharacteristic *pCharacteristicOnOff;
+BLECharacteristic *pCharacteristicLux;
+BLECharacteristic *pCharacteristicSleep;
 
-// const int airValue = 2900;	// Sensor in mid air
-// const int waterValue = 900; // Sensor in water
-// const int soilPin = A0;
-// const int NUMBER_OF_SAMPLES = 5;
- const int MAXREADINGS = 5;
+const int MAXREADINGS = 5;
 
 const int buttonPin = 32;
-/** Pin number for DHT11 data pin */
 
-
-
-// DHTesp dht;
-
-// BH1750 lightMeter(0x23);
+bool broadcastStarted = false;
 
 #define uS_TO_S_FACTOR 1000000
 // #define TIME_TO_SLEEP 1200
 #define TIME_TO_SLEEP 8
 
 
-//TODO: Delete this, since it wont work in hibernation.
-typedef struct
-{
-	int prevMoisture = 0;
-	unsigned long epochTime = 0;
-} readings;
+// //TODO: Delete this, since it wont work in hibernation.
+// typedef struct
+// {
+// 	int prevMoisture = 0;
+// 	unsigned long epochTime = 0;
+// } readings;
 
-RTC_DATA_ATTR int prevReadingsCount = 0;
-RTC_DATA_ATTR readings PrevValues[MAXREADINGS];
+// RTC_DATA_ATTR int prevReadingsCount = 0;
+// RTC_DATA_ATTR readings PrevValues[MAXREADINGS];
 
-// Timer variables
-unsigned long lastTime = 0;
-unsigned long timerDelay = 30000;
 
 /// @brief Prints wake up reason
 void printWakeupReason()
@@ -87,6 +81,13 @@ void setModemSleep() {
     // setCpuFrequencyMhz(40); //TODO: Try with this later, when the communication part is done.
 }
 
+void setActiveMode() {
+	setCpuFrequencyMhz(240);
+	adc_power_on();
+    delay(200);
+	btStart();
+}
+
 void hibernation()
 {
 	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
@@ -96,28 +97,89 @@ void hibernation()
 	esp_deep_sleep_start();
 }
 
+void broadcastBLE(Sensor::Readings readings) {
+	//BLE STUFF
+	// https://randomnerdtutorials.com/esp32-ble-server-client/ TODO: Remove
+	BLEDevice::init("Plantt-Sensor");
+	BLEServer *pServer = BLEDevice::createServer();
+	BLEService *pService = pServer->createService(SERVICE_UUID);
+
+	//Temperature
+	pCharacteristicTemperature = pService->createCharacteristic(
+		CHARACTERISTICS_TEMPERATURE_UUID,
+		BLECharacteristic::PROPERTY_READ);
+	BLEDescriptor temperatureDescriptor(BLEUUID((uint16_t)0x0543));
+
+	temperatureDescriptor.setValue("TemperatureCelcius");
+	pCharacteristicTemperature->addDescriptor(&temperatureDescriptor);
+	pCharacteristicTemperature->setValue(readings.temperature);
+
+	//Humidity
+	pCharacteristicHumidity = pService->createCharacteristic(
+		CHARACTERISTICS_HUMIDITY_UUID,
+		BLECharacteristic::PROPERTY_READ);
+	BLEDescriptor humidityDescriptor(BLEUUID((uint16_t)0x0544));
+
+	humidityDescriptor.setValue("HumidityPercentage");
+	pCharacteristicHumidity->addDescriptor(&humidityDescriptor);
+	pCharacteristicHumidity->setValue(readings.humidity);
+
+
+	//Moisture
+	pCharacteristicMoisture = pService->createCharacteristic(
+		CHARACTERISTICS_MOISTURE_UUID,
+		BLECharacteristic::PROPERTY_READ);
+	BLEDescriptor moistureDescriptor(BLEUUID((uint16_t)0x1079));
+
+	moistureDescriptor.setValue("MoisturePercentage");
+	pCharacteristicMoisture->addDescriptor(&moistureDescriptor);
+	pCharacteristicMoisture->setValue(readings.moisture); //Maybe needs to be uint16_t
+
+	//Lux
+	pCharacteristicLux = pService->createCharacteristic(
+		CHARACTERISTICS_LUX_UUID,
+		BLECharacteristic::PROPERTY_READ);
+	BLEDescriptor luxDescriptor(BLEUUID((uint16_t)0x2731));
+
+	luxDescriptor.setValue("HumidityPercentage");
+	pCharacteristicLux->addDescriptor(&luxDescriptor);
+	pCharacteristicLux->setValue(readings.lux);
+
+
+	//Sleep
+	pCharacteristicSleep = pService->createCharacteristic(
+		CHARACTERISTICS_SLEEP_UUID,
+		BLECharacteristic::PROPERTY_WRITE);
+
+	pCharacteristicSleep->setValue("false");
+	pService->start();
+	// BLEAdvertising *pAdvertising = pServer->getAdvertising();  // this still is working for backward compatibility
+	BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+	pAdvertising->addServiceUUID(SERVICE_UUID);
+	pAdvertising->setScanResponse(true);
+	pAdvertising->setMinPreferred(0x06); // functions that help with iPhone connections issue
+	pAdvertising->setMinPreferred(0x12);
+	BLEDevice::startAdvertising();
+	PrintLn("Characteristic defined! Now you can read it");
+}
+
 void setup()
 {
 	if (PRINT_ENABLED == true)
 	{
 		Serial.begin(115200);
+		delay(1000);
 	}
-	// uint16_t check = getMoisturePercentage(soilPin, waterValue, airValue, NUMBER_OF_SAMPLES);
 
-	delay(1000);
 
-#if PRINT_ENABLED == true
-	// Displays the reason for the wake up
-	printWakeupReason();
-#endif
+	#if PRINT_ENABLED == true
+		// Displays the reason for the wake up
+		printWakeupReason();
+	#endif
 
 	setModemSleep();
 
-	// pinMode(buttonPin, INPUT_PULLUP);
 	pinMode(buttonPin, INPUT);
-
-	// Enable wakeup from button
-	// esp_sleep_enable_ext0_wakeup(GPIO_NUM_32, HIGH); TODO: Delete
 
 	// Enable wakeup from timer
 	esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
@@ -125,91 +187,58 @@ void setup()
 
 	PrintLn("Starting BLE work!");
 
-	// BLE STUFF
-	// BLEDevice::init("Plantt-Sensor");
-	// BLEServer *pServer = BLEDevice::createServer();
-	// BLEService *pService = pServer->createService(SERVICE_UUID);
-	// pCharacteristicMoisture = pService->createCharacteristic(
-	// 	CHARACTERISTICSSTRING_UUID,
-	// 	BLECharacteristic::PROPERTY_READ);
-	// BLEDescriptor moistureDescriptor(BLEUUID((uint16_t)0x2902));
-	// // https://randomnerdtutorials.com/esp32-ble-server-client/ TODO: Remove
-	// uint16_t moisture = getMoisturePercentage(soilPin, waterValue, airValue, NUMBER_OF_SAMPLES); //TODO: to this before in light sleep prob?
-	// moistureDescriptor.setValue("MoisturePercentage");
-	// pCharacteristicMoisture->addDescriptor(&moistureDescriptor);
-	// pCharacteristicMoisture->setValue(moisture);
-
-	// pCharacteristicOnOff = pService->createCharacteristic(
-	// 	CHARACTERISTICSONOFF_UUID,
-	// 	BLECharacteristic::PROPERTY_WRITE);
-
-	// pCharacteristicOnOff->setValue("false");
-	// pService->start();
-	// // BLEAdvertising *pAdvertising = pServer->getAdvertising();  // this still is working for backward compatibility
-	// BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-	// pAdvertising->addServiceUUID(SERVICE_UUID);
-	// pAdvertising->setScanResponse(true);
-	// pAdvertising->setMinPreferred(0x06); // functions that help with iPhone connections issue
-	// pAdvertising->setMinPreferred(0x12);
-	// BLEDevice::startAdvertising();
-	// PrintLn("Characteristic defined! Now you can read it");
+	
 }
 
 int buttonState = 0;
 void loop()
-{
-	PrintLn("test1");
+{	
+	buttonState = digitalRead(GPIO_NUM_32);
 
+	if (buttonState == true)
+	{
+		//Blink a LED here or something.
+		if (millis() > 5000)
+		{
+			//Do setup here.
+		}
+		
+	} 
+	else if (broadcastStarted == false)
+	{
+		broadcastStarted = true;
 		Sensor sensor;
 		Sensor::Readings readings = sensor.getSensorData();
+		broadcastBLE(readings);
+	}
 	
+	PrintLn("BLE getvalue: ");
+	const char* asd = pCharacteristicSleep->getValue().c_str();
+	PrintLn(asd);
+	PrintLn("");
+
 	
+	PrintLn("int val>");
+	PrintLn((int)pCharacteristicSleep->getData());
+	PrintLn("");
 
-	//sensor.~Sensor();
+	if (pCharacteristicSleep->getValue() == "true") //TODO: make this into a bool?.
+	{
+		PrintLn();
+		PrintLn("Goes into hibernation mode by request");
+		PrintLn("----------------------");
+		delay(100);
+		hibernation();
+	}
 
-	// //Lav målinger på samme måde som moisture og pak det væk i sin egen fil og functioner.
-	// if (lightMeter.measurementReady()) {
-    // float lux = lightMeter.readLightLevel();
-    // Serial.println("");
-    // Serial.print("Light: ");
-    // Serial.print(lux);
-    // Serial.println(" lx");
-  	// }
-
-	// buttonState = digitalRead(GPIO_NUM_32);
-
-	// // Reading temperature for humidity takes about 250 milliseconds!
-	// // Sensor readings may also be up to 2 seconds 'old' (it's a very slow sensor)
-	// TempAndHumidity newValues = dht.getTempAndHumidity();
-	// // Check if any reads failed and exit early (to try again).
-	// if (dht.getStatus() != 0)
-	// {
-	// 	Serial.println("DHT11 error status: " + String(dht.getStatusString()));
-	// 	// return false;
-	// }
-
-	// Serial.println(" T:" + String(newValues.temperature) + " H:" + String(newValues.humidity));
-	// Serial.println("");
-
-	//getMoisturePercentage(soilPin, waterValue, airValue, NUMBER_OF_SAMPLES); // TODO: to this before in light sleep prob?
-
-	// if (pCharacteristicOnOff->getValue() == "true") TODO: for later use.
-	// {
-	// 	PrintLn();
-	// 	PrintLn("Goes into Deep Sleep mode by request");
-	// 	PrintLn("----------------------");
-	// 	delay(100);
-	// 	hibernationWithRTC();
-	// }
-
-	// if (millis() > 5000)
-	// { // 30s = 30000 ms. 1 min = 60000 ms.
-	// 	PrintLn();
-	// 	PrintLn("Goes into Deep Sleep mode by timeout");
-	// 	PrintLn("----------------------");
-	// 	delay(100);
-	// 	hibernationWithRTC();
-	// }
+	if (millis() > 120000)
+	{ // 30s = 30000 ms. 1 min = 60000 ms.
+		PrintLn();
+		PrintLn("Goes into hibernation mode by timeout");
+		PrintLn("----------------------");
+		delay(100);
+		hibernation();
+	}
 
 	// put your main code here, to run repeatedly:
 	// delay(2000);
