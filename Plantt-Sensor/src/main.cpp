@@ -73,7 +73,7 @@ void printWakeupReason()
 
 void setModemSleep() {
 	btStop();
-	adc_power_off();
+	//adc_power_off();
     WiFi.disconnect(true);  // Disconnect from the network
     WiFi.mode(WIFI_OFF);
     setCpuFrequencyMhz(80);
@@ -84,7 +84,7 @@ void setModemSleep() {
 void setActiveMode() {
 	setCpuFrequencyMhz(240);
 	adc_power_on();
-    delay(200);
+    delay(100);
 	btStart();
 }
 
@@ -98,9 +98,11 @@ void hibernation()
 }
 
 void broadcastBLE(Sensor::Readings readings) {
-	//BLE STUFF
-	// https://randomnerdtutorials.com/esp32-ble-server-client/ TODO: Remove
-	BLEDevice::init("Plantt-Sensor");
+	PrintLn("millis: in modem sleep");
+	PrintLn(millis());
+	setActiveMode();
+	
+	BLEDevice::init("Plantt");
 	BLEServer *pServer = BLEDevice::createServer();
 	BLEService *pService = pServer->createService(SERVICE_UUID);
 
@@ -109,6 +111,7 @@ void broadcastBLE(Sensor::Readings readings) {
 		CHARACTERISTICS_TEMPERATURE_UUID,
 		BLECharacteristic::PROPERTY_READ);
 	BLEDescriptor temperatureDescriptor(BLEUUID((uint16_t)0x0543));
+	//BLEDescriptor temperatureDescriptor(BLEUUID((uint16_t)0x2902));
 
 	temperatureDescriptor.setValue("TemperatureCelcius");
 	pCharacteristicTemperature->addDescriptor(&temperatureDescriptor);
@@ -119,6 +122,7 @@ void broadcastBLE(Sensor::Readings readings) {
 		CHARACTERISTICS_HUMIDITY_UUID,
 		BLECharacteristic::PROPERTY_READ);
 	BLEDescriptor humidityDescriptor(BLEUUID((uint16_t)0x0544));
+	//BLEDescriptor humidityDescriptor(BLEUUID((uint16_t)0x2902));
 
 	humidityDescriptor.setValue("HumidityPercentage");
 	pCharacteristicHumidity->addDescriptor(&humidityDescriptor);
@@ -130,6 +134,7 @@ void broadcastBLE(Sensor::Readings readings) {
 		CHARACTERISTICS_MOISTURE_UUID,
 		BLECharacteristic::PROPERTY_READ);
 	BLEDescriptor moistureDescriptor(BLEUUID((uint16_t)0x1079));
+	//BLEDescriptor moistureDescriptor(BLEUUID((uint16_t)0x2902));
 
 	moistureDescriptor.setValue("MoisturePercentage");
 	pCharacteristicMoisture->addDescriptor(&moistureDescriptor);
@@ -139,9 +144,10 @@ void broadcastBLE(Sensor::Readings readings) {
 	pCharacteristicLux = pService->createCharacteristic(
 		CHARACTERISTICS_LUX_UUID,
 		BLECharacteristic::PROPERTY_READ);
-	BLEDescriptor luxDescriptor(BLEUUID((uint16_t)0x2731));
+	//BLEDescriptor luxDescriptor(BLEUUID((uint16_t)0x2731));
+	BLEDescriptor luxDescriptor(BLEUUID((uint16_t)0x2902));
 
-	luxDescriptor.setValue("HumidityPercentage");
+	luxDescriptor.setValue("LuxPercentage");
 	pCharacteristicLux->addDescriptor(&luxDescriptor);
 	pCharacteristicLux->setValue(readings.lux);
 
@@ -150,15 +156,33 @@ void broadcastBLE(Sensor::Readings readings) {
 	pCharacteristicSleep = pService->createCharacteristic(
 		CHARACTERISTICS_SLEEP_UUID,
 		BLECharacteristic::PROPERTY_WRITE);
+	BLEDescriptor sleepDescriptor(BLEUUID((uint16_t)0x2902));
+	pCharacteristicSleep->addDescriptor(&sleepDescriptor);
 
-	pCharacteristicSleep->setValue("false");
+
+/* 	sleepDescriptor.setValue("SleepToggle");
+	pCharacteristicSleep->addDescriptor(&sleepDescriptor); */
+/* 	uint16_t zero = 0; TODO: DELETE */
+
+
+	//pCharacteristicSleep->setValue("false");
+	//pCharacteristicSleep->setValue("false");
+	uint8_t value = 0;
+	pCharacteristicSleep->setValue((uint8_t*)&value, sizeof(value));
 	pService->start();
 	// BLEAdvertising *pAdvertising = pServer->getAdvertising();  // this still is working for backward compatibility
 	BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
 	pAdvertising->addServiceUUID(SERVICE_UUID);
 	pAdvertising->setScanResponse(true);
-	pAdvertising->setMinPreferred(0x06); // functions that help with iPhone connections issue
-	pAdvertising->setMinPreferred(0x12);
+	//pAdvertising->setMinPreferred(1);
+	//pAdvertising->setMinPreferred(0x06); // functions that help with iPhone connections issue
+	pAdvertising->setMinPreferred(0x08); //OVERVEJ AT FJERN DENNE LINE OG SE OM BROADCAST AF SERVICE UUID FORSVINDER eller sæt til 0
+	//pAdvertising->setMinPreferred(5); 
+	//pServer->getAdvertising()->start();
+
+	
+
+
 	BLEDevice::startAdvertising();
 	PrintLn("Characteristic defined! Now you can read it");
 }
@@ -211,27 +235,22 @@ void loop()
 		Sensor::Readings readings = sensor.getSensorData();
 		broadcastBLE(readings);
 	}
-	
-	PrintLn("BLE getvalue: ");
-	const char* asd = pCharacteristicSleep->getValue().c_str();
-	PrintLn(asd);
-	PrintLn("");
 
-	
-	PrintLn("int val>");
-	PrintLn((int)pCharacteristicSleep->getData());
-	PrintLn("");
+	//BLEDevice::startAdvertising();
 
-	if (pCharacteristicSleep->getValue() == "true") //TODO: make this into a bool?.
+	if (*pCharacteristicSleep->getData() == 1) 
 	{
 		PrintLn();
+		PrintLn("millis: since start");
+		PrintLn(millis());
 		PrintLn("Goes into hibernation mode by request");
 		PrintLn("----------------------");
+		BLEDevice::stopAdvertising();
 		delay(100);
 		hibernation();
 	}
 
-	if (millis() > 120000)
+	if (millis() > 10000)
 	{ // 30s = 30000 ms. 1 min = 60000 ms.
 		PrintLn();
 		PrintLn("Goes into hibernation mode by timeout");

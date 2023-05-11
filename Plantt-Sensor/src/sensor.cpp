@@ -14,7 +14,7 @@ Sensor::Sensor()
     {
         PrintLn(F("Error initialising BH1750"));
     }
-    delay(1000);
+    delay(250);
     dht->setup(dhtPin, DHTesp::DHT11);
 }
 
@@ -48,7 +48,7 @@ int Sensor::ReadMoisture()
 float Sensor::ReadLux()
 {
     float lux = 0.0F;
-    if (lightMeter->measurementReady())
+    if (lightMeter->measurementReady(true))
     {
         lux = lightMeter->readLightLevel();
         PrintLn("");
@@ -63,9 +63,11 @@ float Sensor::ReadLux()
 /// @return struct with humidty and temperature
 TempAndHumidity Sensor::ReadTempAndHumidity()
 {
+    
     // Reading temperature for humidity takes about 250 milliseconds!
     // Sensor readings may also be up to 2 seconds 'old' (it's a very slow sensor)
     TempAndHumidity values = dht->getTempAndHumidity();
+
     // Check if any reads failed and exit early (to try again).
     if (dht->getStatus() != 0)
     {
@@ -81,6 +83,7 @@ TempAndHumidity Sensor::ReadTempAndHumidity()
     PrintLn(values.temperature);
     PrintLn("Humidity: ");
     PrintL(values.humidity);
+    PrintLn("");
 
     return values;
 }
@@ -91,25 +94,25 @@ Sensor::Readings Sensor::getSensorData()
 {
     Readings result;
 
-    TempAndHumidity tempHumReading = ReadTempAndHumidity();
-    if (tempHumReading.humidity == 0.0F || tempHumReading.temperature == 0.0F )
-    {
-        delay(1000); // sensor is pretty slow.
-        tempHumReading = ReadTempAndHumidity();
-    }
-
     float luxReading = ReadLux();
     if (luxReading == 0.0f)
     {
-        delay(250);
+        //delay(250);
         luxReading = ReadLux();
     }
 
     float moistureReading = ReadMoisture();
     if (moistureReading == 0)
     {
-        delay(250);
+        //delay(250);
         moistureReading = ReadMoisture();
+    }
+
+    TempAndHumidity tempHumReading = ReadTempAndHumidity();
+    if (tempHumReading.humidity == 0.0F || tempHumReading.temperature == 0.0F )
+    {
+        
+        tempHumReading = ReadTempAndHumidity();
     }
 
     result.humidity = tempHumReading.humidity;
