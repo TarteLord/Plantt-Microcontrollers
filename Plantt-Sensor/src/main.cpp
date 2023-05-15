@@ -101,7 +101,7 @@ void broadcastBLE(Sensor::Readings readings) {
 	PrintLn("millis: in modem sleep");
 	PrintLn(millis());
 	setActiveMode();
-	
+
 	BLEDevice::init("Plantt");
 	BLEServer *pServer = BLEDevice::createServer();
 	BLEService *pService = pServer->createService(SERVICE_UUID);
@@ -138,7 +138,7 @@ void broadcastBLE(Sensor::Readings readings) {
 
 	moistureDescriptor.setValue("MoisturePercentage");
 	pCharacteristicMoisture->addDescriptor(&moistureDescriptor);
-	pCharacteristicMoisture->setValue(readings.moisture); //Maybe needs to be uint16_t
+	pCharacteristicMoisture->setValue(readings.moisture);
 
 	//Lux
 	pCharacteristicLux = pService->createCharacteristic(
@@ -159,26 +159,13 @@ void broadcastBLE(Sensor::Readings readings) {
 	BLEDescriptor sleepDescriptor(BLEUUID((uint16_t)0x2902));
 	pCharacteristicSleep->addDescriptor(&sleepDescriptor);
 
-
-/* 	sleepDescriptor.setValue("SleepToggle");
-	pCharacteristicSleep->addDescriptor(&sleepDescriptor); */
-/* 	uint16_t zero = 0; TODO: DELETE */
-
-
-	//pCharacteristicSleep->setValue("false");
-	//pCharacteristicSleep->setValue("false");
 	uint8_t value = 0;
 	pCharacteristicSleep->setValue((uint8_t*)&value, sizeof(value));
 	pService->start();
-	// BLEAdvertising *pAdvertising = pServer->getAdvertising();  // this still is working for backward compatibility
 	BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
 	pAdvertising->addServiceUUID(SERVICE_UUID);
 	pAdvertising->setScanResponse(true);
-	//pAdvertising->setMinPreferred(1);
-	//pAdvertising->setMinPreferred(0x06); // functions that help with iPhone connections issue
-	pAdvertising->setMinPreferred(0x08); //OVERVEJ AT FJERN DENNE LINE OG SE OM BROADCAST AF SERVICE UUID FORSVINDER eller sæt til 0
-	//pAdvertising->setMinPreferred(5); 
-	//pServer->getAdvertising()->start();
+	pAdvertising->setMinPreferred(0x08); //For helping with services discovery.
 
 	
 
@@ -236,8 +223,6 @@ void loop()
 		broadcastBLE(readings);
 	}
 
-	//BLEDevice::startAdvertising();
-
 	if (*pCharacteristicSleep->getData() == 1) 
 	{
 		PrintLn();
@@ -258,9 +243,6 @@ void loop()
 		delay(100);
 		hibernation();
 	}
-
-	// put your main code here, to run repeatedly:
-	// delay(2000);
 
 	delay(150);
 }
