@@ -24,6 +24,7 @@ static BLEUUID sleepUUID("8d45ef7f-57b5-48f1-bf95-baf39be3442d");
 static boolean doConnect = false;
 static boolean connected = false;
 static boolean doScan = false;
+static boolean loggedIn = false;
 
 static BLERemoteCharacteristic *pCharacteristicTemperature;
 static BLERemoteCharacteristic *pCharacteristicHumidity;
@@ -44,10 +45,12 @@ typedef struct
 	float temperature;
 } Readings;
 
+/// @brief Tracks state of the BLE Client.
 class MyClientCallback : public BLEClientCallbacks
 {
 	void onConnect(BLEClient *pclient)
 	{
+		connected = true;
 		PrintLn("Connected");
 	}
 
@@ -58,7 +61,10 @@ class MyClientCallback : public BLEClientCallbacks
 	}
 };
 
-bool checkCharacteristic(BLERemoteService *pRemoteService /* pClient as arg? */)
+/// @brief Checks if the Characteristics are present on the BLE service
+/// @param pRemoteService The service to check
+/// @return state of the check
+bool checkCharacteristic(BLERemoteService *pRemoteService)
 {
 	// Obtain a reference to the characteristic in the service of the remote BLE server.
 
@@ -130,6 +136,8 @@ bool checkCharacteristic(BLERemoteService *pRemoteService /* pClient as arg? */)
 	return true;
 }
 
+/// @brief Connect to BLE device and check Service and Characteristic are defined. 
+/// @return boolean on the state
 bool connectToServer()
 {
 	PrintL("Forming a connection to ");
@@ -160,11 +168,11 @@ bool connectToServer()
 		return false;
 	}
 
-	connected = true;
-
 	return true;
 }
 
+/// @brief Reads all predefined characteristics on Plantt-Sensor
+/// @return A Readings struct containing data
 Readings readBLEData()
 {
 	Readings readings = {};
@@ -222,14 +230,9 @@ Readings readBLEData()
 	return readings;
 }
 
-/**
- * Scan for BLE servers and find the first one that advertises the service we are looking for.
- */
-class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
+/// @brief Checks each BLE device found.
+class AdvertisedBLECallbacks : public BLEAdvertisedDeviceCallbacks
 {
-	/**
-	 * Called for each advertising BLE server.
-	 */
 	void onResult(BLEAdvertisedDevice advertisedDevice)
 	{
 		PrintL("BLE Advertised Device found: ");
@@ -246,6 +249,9 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 	}
 };
 
+/// @brief Post data to API, using http request.
+/// @param readings 
+/// @return boolean if succeeded.
 bool postReadingsAPI(Readings readings)
 {
 	bool result = false;
@@ -278,12 +284,13 @@ bool postReadingsAPI(Readings readings)
 		PrintLn("response:");
 		PrintLn(response); // Print request answer
 
-		if (httpResponseCode >= 200 && httpResponseCode <= 204 || httpResponseCode == 307)
+		if ((httpResponseCode >= 200 && httpResponseCode <= 204) || httpResponseCode == 307)
 		{
 			result = true;
 		}
 		else if (httpResponseCode == 401) 
 		{
+			loggedIn = false;
 			//TODO: Handle not logged in.
 		}
 	}
@@ -304,7 +311,7 @@ void startBLE()
 	BLEDevice::init("");
 
 	pBLEScan = BLEDevice::getScan();
-	pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
+	pBLEScan->setAdvertisedDeviceCallbacks(new AdvertisedBLECallbacks());
 	pBLEScan->setActiveScan(true);
 	pBLEScan->setInterval(100);
 	pBLEScan->setWindow(99); // less or equal setInterval value
@@ -322,15 +329,9 @@ int readBLEDevice()
 	// If the flag "doConnect" is true then we have scanned for and found the desired
 	// BLE Server with which we wish to connect.  Now we connect to it.  Once we are
 	// connected we set the connected flag to be true.
-	/*  PrintLn("Check 1");
-
-
-	 PrintLn("doConnect: ");
-	 PrintLn(doConnect); */
 
 	if (doConnect == true)
 	{
-		/* PrintLn("Check 2"); */
 		if (connectToServer())
 		{
 			PrintLn("We are now connected to the BLE Server.");
@@ -345,19 +346,17 @@ int readBLEDevice()
 	if (connected)
 	{
 		Readings readings = readBLEData();
-		connected = false;
 
-		// delay(1000);
+		//Connect to WIFI.
 		WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
 		WiFi.setHostname("ESP32 Hub");
 		WiFi.mode(WIFI_STA);		// Station mode.
 		WiFi.begin(ssid, password); // Connect to Wifi AP
 		delay(100);
 
-		PrintLn("Check 1");
 		int wifiAttemps = 0;
 
-		while (WiFi.status() != WL_CONNECTED && wifiAttemps <= 10)
+		while (WiFi.status() != WL_CONNECTED && wifiAttemps <= 20)
 		{
 			delay(200);
 			wifiAttemps++;
@@ -365,9 +364,10 @@ int readBLEDevice()
 			PrintLn(wifiAttemps);
 		}
 
-		if (wifiAttemps >= 11)
+		if (wifiAttemps >= 21)
 		{
-			//TODO: Save data for next time.
+			PrintL("Could not connect to wifi.");
+			//TODO: Save data for next time, since we can't connect to wifi.
 		}
 		
 
@@ -400,7 +400,6 @@ void setup()
 
 } // End of setup.
 
-// This is the Arduino main loop function.
 void loop()
 {
 	BLEScanResults foundDevices = pBLEScan->start(5, false);
@@ -408,100 +407,9 @@ void loop()
 	PrintLn(foundDevices.getCount());
 	PrintLn("Scan done!");
 	pBLEScan->clearResults(); // delete results from BLEScan buffer to release memory
-	delay(2000);
+	delay(2000); //TODO: Can we make this value smaler?
 
 	int value = readBLEDevice(); // TODO: redo this function
-	// -----------------------------------------------------------------------------------------------------------
-	// -----------------------------------------------------------------------------------------------------------
-	/*
-
-		char bodyTest[100] = "{\"Temperature\":26.1,\"Humidity\":27.0,\"Lux\":99.0,\"Moisture\":22}";
-
-
-			//WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
-			WiFi.setHostname("ESP32 Hub");
-			WiFi.mode(WIFI_STA);		// Station mode.
-			WiFi.begin(ssid, password); // Connect to Wifi AP
-			delay(100);
-
-			int wifiAttemps = 0;
-
-			while (WiFi.status() != WL_CONNECTED && wifiAttemps <= 10)
-			{
-				delay(200);
-				wifiAttemps++;
-				PrintL("Not connected to wifi, attempt: ");
-				PrintLn(wifiAttemps);
-			}
-
-			if (WiFi.status() == WL_CONNECTED)
-			{
-
-				WiFiClientSecure *client = new WiFiClientSecure;
-
-				//client->setCACert(plantt_root_ca);
-				//client->setInsecure();
-
-				// Todo: maybe set the correct size for the char[]
-				char Uri[20] = "/api/v1/hub/";
-				char host[30] = "www.plantt.dk";
-				char hostHTTPS[30] = "https://www.plantt.dk";
-				char hostHttp[35] = "http://www.plantt.dk/api/v1/hub/";
-
-
-				sprintf(Uri + strlen(Uri), "%d", 7);
-				sprintf(hostHttp + strlen(hostHttp), "%d", 7);
-
-
-
-					HTTPClient http;
-
-
-					http.begin(hostHttp); // Specify destination for HTTP request
-					//http.begin(*client, host, 443, Uri, true);	 // Specify destination for HTTP request
-					http.addHeader("Content-Type", "application/json"); // Specify content-type header
-					int httpResponseCode = http.POST("{\"Temperature\":26.1,\"Humidity\":27.0,\"Lux\":99.0,\"Moisture\":22}");
-
-					// int httpResponseCode = http.POST("{ \"username\": \"testtest\", \"password\": \"testPost\"}"); // Send the actual POST request
-					// int httpResponseCode = http.GET(); // Send the actual POST request
-
-					if (httpResponseCode > 0)
-					{
-						String response = http.getString(); // Get the response to the request
-
-						PrintLn("httpResponseCode:");
-						PrintL(httpResponseCode); // Print return code
-						PrintLn("response:");
-						PrintLn(response); // Print request answer
-					}
-					else
-					{
-						PrintL("Error on sending POST: ");
-						PrintLn(httpResponseCode); // Print return code
-					}
-
-					http.end(); // Free resources
-				} */
-
-	// -----------------------------------------------------------------------------------------------------------
-	// -----------------------------------------------------------------------------------------------------------
-	// if (value != 0)
-	// {
-	//   WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
-	//   WiFi.setHostname("ESP32 Hub");
-	//   WiFi.mode(WIFI_STA); // Station mode.
-	//   WiFi.begin(ssid, password); //Connect to Wifi AP
-	//   delay(100);
-
-	//   int wifiAttemps = 0;
-
-	//   while (WiFi.status() != WL_CONNECTED && wifiAttemps <= 10) {
-	//   delay(200);
-	//   wifiAttemps++;
-	//   PrintL("Not connected to wifi, attempt: ");
-	//   PrintLn(wifiAttemps);
-	//   }
-	// }
-
+	
 	delay(5000); // Delay a second between loops.
 } // End of loop
