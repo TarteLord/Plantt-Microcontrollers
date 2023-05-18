@@ -5,6 +5,7 @@
 #include <HTTPClient.h>
 #include "preprocessors.h"
 #include "readings.h"
+#include "timeRTC.h"
 
 class API
 {
@@ -19,7 +20,7 @@ private:
 	
 	const char* GetAccessToken(const char *pIdentity, const char *pSecret);
 	bool ValidateLoginJson(const char *jsonString);
-	bool CheckAccessToken();
+	bool AccessTokenValid();
 
 public:
 	API(const char *pIdentity, const char *pSecret);
@@ -27,14 +28,6 @@ public:
 
 	bool PostReadingsAPI(Readings readings);
 	bool SetAccessToken(const char *pIdentity, const char *pSecret);
-
-/* 
-	struct login
-	{
-		char accessToken[400];
-		char expireTS[30];
-	}; */
-
 
 	
 };

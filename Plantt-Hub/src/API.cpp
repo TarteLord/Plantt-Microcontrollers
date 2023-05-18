@@ -2,7 +2,7 @@
 #include "API.h"
 
 
-API::API(const char *pIdentity, const char *pSecret) : _expireTS(NULL), _accessToken(""), _loggedIn(false)
+API::API(const char *pIdentity, const char *pSecret) : _accessToken(""), expireTS(""), _expireTS(NULL),  _loggedIn(false)
 {
 	if (SetAccessToken(pIdentity, pSecret))
 	{
@@ -20,12 +20,13 @@ bool API::SetAccessToken(const char *pIdentity, const char *pSecret) {
 	return API::ValidateLoginJson(GetAccessToken(pIdentity, pSecret));
 }
 
-bool API::CheckAccessToken() {
-	if (1 == 2)
+
+bool API::AccessTokenValid() {
+	if (TimeRTC::GetEpochTime() < (_expireTS + 600))
 	{
-		/* code */
+		return false;
 	}
-	
+	return true;
 }
 
 bool API::ValidateLoginJson(const char *jsonString)

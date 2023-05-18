@@ -8,7 +8,7 @@
 #include "preprocessors.h"
 #include "readings.h"
 #include "API.h"
-#include "time.h"
+#include "timeRTC.h"
 
 const char *ssid = "May the WIFI be with you";
 const char *password = "Abekat123";
@@ -16,10 +16,6 @@ const char *password = "Abekat123";
 const char *identity = "O9HpT_OYWm2FbvVko7y32yy2";
 const char *secret = "uIrHT1U540GaaTM4sCefJjgS-kSn0neL3fK8k-QDyLijq1HCtCPAp7xVO7DUP-EW";
 
-WiFiUDP ntpUDP;
-NTPClient ntpClient(ntpUDP, "dk.pool.ntp.org"); //NTP server for clock.
-
-RTC_DS3231 rtc; // Real time clock.
 
 char accessToken[400] = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJhYTZlNDYwZi05NjczLTRiNjktOWI2ZS0wZGVmY2Q4N2RhYTYiLCJzdWIiOiJPOUhwVF9PWVdtMkZidlZrbzd5MzJ5eTIiLCJpc3MiOiJpc3N1ZXIuY29tIiwicm9sZSI6IlRva2VuIiwibmJmIjoxNjg0MjM2MjIwLCJleHAiOjE2ODQyMzk4MjAsImlhdCI6MTY4NDIzNjIyMH0.6Pl-UXWhQm163COVYwA8CpyKAWAa4-EVd6NH_BDXpY8";
 char expireTS [30] = "2023-05-16T12:26:03.5627978Z";
@@ -379,7 +375,7 @@ void setup()
 	
 	PrintLn("Starting Plantt Hub");
 	
-	if (Time::StartRTC())
+	if (TimeRTC::StartRTC())
 	{
 		PrintLn("Time succesfully started");
 	}
