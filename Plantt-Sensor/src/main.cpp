@@ -26,21 +26,23 @@ const int MAXREADINGS = 5;
 const int buttonPin = 32;
 
 bool broadcastStarted = false;
+bool clientConnected = false;
 
 #define uS_TO_S_FACTOR 1000000
 // #define TIME_TO_SLEEP 1200
 #define TIME_TO_SLEEP 8
 
+class BLECallbacks : public BLEServerCallbacks {
+  void onConnect(BLEServer* pServer) {
+    PrintLn("A client has connected");
+	clientConnected = true;
+  }
 
-// //TODO: Delete this, since it wont work in hibernation.
-// typedef struct
-// {
-// 	int prevMoisture = 0;
-// 	unsigned long epochTime = 0;
-// } readings;
-
-// RTC_DATA_ATTR int prevReadingsCount = 0;
-// RTC_DATA_ATTR readings PrevValues[MAXREADINGS];
+  void onDisconnect(BLEServer* pServer) {
+    PrintLn("A client has disconnected");
+	clientConnected = false;
+  }
+};
 
 
 /// @brief Prints wake up reason
@@ -73,7 +75,7 @@ void printWakeupReason()
 
 void setModemSleep() {
 	btStop();
-	//adc_power_off();
+	//adc_power_off(); TODO: Delete
     WiFi.disconnect(true);  // Disconnect from the network
     WiFi.mode(WIFI_OFF);
     setCpuFrequencyMhz(80);
@@ -84,7 +86,7 @@ void setModemSleep() {
 void setActiveMode() {
 	setCpuFrequencyMhz(240);
 	adc_power_on();
-    delay(100);
+    delay(100);	
 	btStart();
 }
 
@@ -104,6 +106,7 @@ void broadcastBLE(Sensor::Readings readings) {
 
 	BLEDevice::init("Plantt");
 	BLEServer *pServer = BLEDevice::createServer();
+	pServer->setCallbacks(new BLECallbacks());
 	BLEService *pService = pServer->createService(SERVICE_UUID);
 
 	//Temperature
@@ -167,9 +170,6 @@ void broadcastBLE(Sensor::Readings readings) {
 	pAdvertising->setScanResponse(true);
 	pAdvertising->setMinPreferred(0x08); //For helping with services discovery.
 
-	
-
-
 	BLEDevice::startAdvertising();
 	PrintLn("Characteristic defined! Now you can read it");
 }
@@ -223,6 +223,8 @@ void loop()
 		broadcastBLE(readings);
 	}
 
+	//Try to sleep on disconnect instead and timeout.
+
 	if (*pCharacteristicSleep->getData() == 1) 
 	{
 		PrintLn();
@@ -235,11 +237,22 @@ void loop()
 		hibernation();
 	}
 
-	if (millis() > 10000)
+	if (millis() > 8000 && clientConnected == false) //Before it was 100000
 	{ // 30s = 30000 ms. 1 min = 60000 ms.
 		PrintLn();
 		PrintLn("Goes into hibernation mode by timeout");
 		PrintLn("----------------------");
+		BLEDevice::stopAdvertising();
+		delay(100);
+		hibernation();
+	}
+
+	if (millis() > 12000)
+	{ // 30s = 30000 ms. 1 min = 60000 ms.
+		PrintLn();
+		PrintLn("Goes into hibernation mode by timeout");
+		PrintLn("----------------------");
+		BLEDevice::stopAdvertising();
 		delay(100);
 		hibernation();
 	}

@@ -2,13 +2,27 @@
 #include <BLEDevice.h>
 #include <Arduino.h>
 #include <inttypes.h>
-#include <HTTPClient.h>
+//#include <HTTPClient.h>
 #include <WiFi.h>
+#include <WiFiUdp.h>
 #include "preprocessors.h"
+#include "readings.h"
+#include "API.h"
+#include "time.h"
 
 const char *ssid = "May the WIFI be with you";
 const char *password = "Abekat123";
 
+const char *identity = "O9HpT_OYWm2FbvVko7y32yy2";
+const char *secret = "uIrHT1U540GaaTM4sCefJjgS-kSn0neL3fK8k-QDyLijq1HCtCPAp7xVO7DUP-EW";
+
+WiFiUDP ntpUDP;
+NTPClient ntpClient(ntpUDP, "dk.pool.ntp.org"); //NTP server for clock.
+
+RTC_DS3231 rtc; // Real time clock.
+
+char accessToken[400] = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJhYTZlNDYwZi05NjczLTRiNjktOWI2ZS0wZGVmY2Q4N2RhYTYiLCJzdWIiOiJPOUhwVF9PWVdtMkZidlZrbzd5MzJ5eTIiLCJpc3MiOiJpc3N1ZXIuY29tIiwicm9sZSI6IlRva2VuIiwibmJmIjoxNjg0MjM2MjIwLCJleHAiOjE2ODQyMzk4MjAsImlhdCI6MTY4NDIzNjIyMH0.6Pl-UXWhQm163COVYwA8CpyKAWAa4-EVd6NH_BDXpY8";
+char expireTS [30] = "2023-05-16T12:26:03.5627978Z";
 // static BLEUUID sensors[5] = {BLEUUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b"), BLEUUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b")};
 
 // The remote service we wish to connect to.
@@ -24,7 +38,7 @@ static BLEUUID sleepUUID("8d45ef7f-57b5-48f1-bf95-baf39be3442d");
 static boolean doConnect = false;
 static boolean connected = false;
 static boolean doScan = false;
-static boolean loggedIn = false;
+static boolean doneReading = true;
 
 static BLERemoteCharacteristic *pCharacteristicTemperature;
 static BLERemoteCharacteristic *pCharacteristicHumidity;
@@ -37,13 +51,7 @@ BLEClient *pClient;
 
 static BLEAdvertisedDevice *myDevice;
 
-typedef struct
-{
-	int moisture;
-	float lux;
-	float humidity;
-	float temperature;
-} Readings;
+
 
 /// @brief Tracks state of the BLE Client.
 class MyClientCallback : public BLEClientCallbacks
@@ -58,6 +66,15 @@ class MyClientCallback : public BLEClientCallbacks
 	{
 		connected = false;
 		PrintLn("onDisconnect");
+		if (doneReading == false)
+		{
+			PrintLn("Was disruppet unexpectexly");
+			doneReading = true;
+
+			//reboot since there apparently is not other way.
+			ESP.restart();
+		}
+		
 	}
 };
 
@@ -175,6 +192,7 @@ bool connectToServer()
 /// @return A Readings struct containing data
 Readings readBLEData()
 {
+	doneReading = false; //Lock in case of timeout in connection
 	Readings readings = {};
 	//----------------------------------------------------------------------------------------------
 	// Read the value of temperature from the characteristic.
@@ -226,6 +244,7 @@ Readings readBLEData()
 	}
 
 	pClient->disconnect();
+	doneReading = true;
 
 	return readings;
 }
@@ -235,77 +254,22 @@ class AdvertisedBLECallbacks : public BLEAdvertisedDeviceCallbacks
 {
 	void onResult(BLEAdvertisedDevice advertisedDevice)
 	{
-		PrintL("BLE Advertised Device found: ");
-		PrintLn(advertisedDevice.toString().c_str());
+		//PrintL("BLE Advertised Device found: ");
+		//PrintLn(advertisedDevice.toString().c_str());
 
 		if (advertisedDevice.getServiceUUID().equals(serviceUUID))
 		{
-			PrintLn("We found it! UUID: ");
+			PrintLn("Found service with UUID: ");
+			PrintLn(advertisedDevice.toString().c_str());
 			myDevice = new BLEAdvertisedDevice(advertisedDevice);
 			doConnect = true;
-			// BLEDevice::getScan()->stop();
 			pBLEScan->stop();
 		}
 	}
 };
 
-/// @brief Post data to API, using http request.
-/// @param readings 
-/// @return boolean if succeeded.
-bool postReadingsAPI(Readings readings)
-{
-	bool result = false;
-	char hostHttp[35] = "http://www.plantt.dk/api/v1/hub/";
 
-	char body[80] = "{\"Temperature\":";
-	sprintf(body + strlen(body), "%.1f", readings.temperature);
-	strcat(body, ",\"Humidity\":");
-	sprintf(body + strlen(body), "%.1f", readings.humidity);
-	strcat(body, ",\"Lux\":");
-	sprintf(body + strlen(body), "%.1f", readings.lux);
-	strcat(body, ",\"Moisture\":");
-	sprintf(body + strlen(body), "%d", readings.moisture);
-	strcat(body, "}");
-	PrintLn(body);
-
-	sprintf(hostHttp + strlen(hostHttp), "%d", 7);
-
-	HTTPClient http;
-	http.begin(hostHttp);								// Specify destination for HTTP request
-	http.addHeader("Content-Type", "application/json"); // Specify content-type header
-	int httpResponseCode = http.POST(body);
-
-	if (httpResponseCode > 0)
-	{
-		String response = http.getString(); // Get the response to the request
-
-		PrintLn("httpResponseCode:");
-		PrintL(httpResponseCode); // Print return code
-		PrintLn("response:");
-		PrintLn(response); // Print request answer
-
-		if ((httpResponseCode >= 200 && httpResponseCode <= 204) || httpResponseCode == 307)
-		{
-			result = true;
-		}
-		else if (httpResponseCode == 401) 
-		{
-			loggedIn = false;
-			//TODO: Handle not logged in.
-		}
-	}
-	else
-	{
-		PrintL("Error on sending POST: ");
-		PrintLn(httpResponseCode); // Print return code
-	}
-
-	http.end(); // Free resources
-
-	return result;
-}
-
-/// @brief initiate BLE and setup scan and callback.
+/// @brief initiate BLE and   scan and callback.
 void startBLE()
 {
 	BLEDevice::init("");
@@ -347,6 +311,18 @@ int readBLEDevice()
 	{
 		Readings readings = readBLEData();
 
+		PrintLn("readings.humidity");
+		PrintLn(readings.humidity);
+		PrintLn("readings.temperature");
+		PrintLn(readings.temperature);
+		PrintLn("readings.moisture");
+		PrintLn(readings.moisture);
+		PrintLn("readings.lux");
+		PrintLn(readings.lux);
+
+		//esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
+		
+
 		//Connect to WIFI.
 		WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
 		WiFi.setHostname("ESP32 Hub");
@@ -373,12 +349,16 @@ int readBLEDevice()
 
 		if (WiFi.status() == WL_CONNECTED)
 		{
-			// Try again if we failed to post data.
-			if (!postReadingsAPI(readings))
+			
+			//API::getAccessToken(identity, secret); todo: delete
+			API api(identity, secret);
+			
+			if (!api.postReadingsAPI(readings))
 			{
+				// Try again if we failed to post data.
 				delay(1000);
 				PrintL("Failed to post data to API");
-				postReadingsAPI(readings);
+				api.postReadingsAPI(readings);
 			}
 		}
 	}
@@ -395,7 +375,13 @@ void setup()
 		Serial.begin(115200);
 		delay(1000);
 	}
+
+	
 	PrintLn("Starting Plantt Hub");
+	
+	time::startRTC();
+
+	
 	startBLE();
 
 } // End of setup.
@@ -410,6 +396,7 @@ void loop()
 	delay(2000); //TODO: Can we make this value smaler?
 
 	int value = readBLEDevice(); // TODO: redo this function
+
 	
 	delay(5000); // Delay a second between loops.
 } // End of loop
