@@ -1,37 +1,26 @@
 #include "API.h"
 
-// API::API(const char *pIdentity, const char *pSecret, TimeRTC *timeRTC) : _accessToken(""), expireTS(""), _expireEpoch(NULL),  _loggedIn(false), _identity(pIdentity), _secret(pSecret),_timeRTC(timeRTC)
-// {
-// 	if (SetAccessToken())
-// 	{
-// 		PrintLn("Succesfully logged in");
-// 	}	
-// }
-
-API::API(const char *pIdentity, const char *pSecret) : _accessToken(""), expireTS(""), _expireEpoch(NULL),  _loggedIn(false), _identity(pIdentity), _secret(pSecret)
+API::API(const char *pIdentity, const char *pSecret) : _accessToken(""), _expireEpoch(0), _loggedIn(false), _identity(pIdentity), _secret(pSecret)
 {
 	if (SetAccessToken())
 	{
 		PrintLn("Succesfully logged in");
-	}	
+	}
 }
-
 
 API::~API()
 {
 }
 
-bool API::SetAccessToken() {
+bool API::SetAccessToken()
+{
 	return API::ValidateLoginJson(GetAccessToken());
 }
 
-bool API::AccessTokenValid() {
-	/* PrintLn("RTC EPOCH TIME:");
-	PrintLn(_timeRTC->GetEpochTime()); */
-	PrintLn("expire EPOCH TIME:");
-	PrintLn(_expireEpoch);
+bool API::AccessTokenValid()
+{
 
-	TimeRTC* timertc = TimeRTC::GetInstance();
+	TimeRTC *timertc = TimeRTC::GetInstance();
 
 	if (timertc->GetEpochTime() < (_expireEpoch /*+ 600 */))
 	{
@@ -46,7 +35,7 @@ bool API::ValidateLoginJson(const char *jsonString)
 	delay(10);
 	if (expireStart == nullptr)
 	{
-		PrintLn("expire not found."); //TODO: why are we sometimes hitting this????
+		PrintLn("expire not found."); // TODO: why are we sometimes hitting this????
 		return false;
 	}
 	expireStart += strlen("\"expire\":"); // Move to the start of the value
@@ -61,18 +50,18 @@ bool API::ValidateLoginJson(const char *jsonString)
 	size_t expiereLength = expireEnd - expireStart;
 	char expireBuffer[11] = "";
 	strncpy(expireBuffer, expireStart, expiereLength); // Add the value to our result
-	expireBuffer[expiereLength] = '\0';	// Null-terminate the string
+	expireBuffer[expiereLength] = '\0';				   // Null-terminate the string
 
-	char* endPtr;
+	char *endPtr;
 	_expireEpoch = strtoul(expireBuffer, &endPtr, 10);
 
-	if (*endPtr != '\0') {
-        // Error occurred during conversion
-        PrintLn("Error: Invalid number format!");
-    }
+	if (*endPtr != '\0')
+	{
+		// Error occurred during conversion
+		PrintLn("Error: Invalid number format!");
+	}
 	PrintLn("ExpireEpoch long");
 	PrintLn(_expireEpoch);
-
 
 	const char *accessTokenStart = strstr(jsonString, "\"accessToken\":\"");
 	if (accessTokenStart == nullptr)
@@ -91,12 +80,12 @@ bool API::ValidateLoginJson(const char *jsonString)
 
 	size_t accessTokenLength = accessTokenEnd - accessTokenStart;
 	strncpy(_accessToken, accessTokenStart, accessTokenLength); // Add the value to our result
-	_accessToken[accessTokenLength] = '\0';	// Null-terminate the string
+	_accessToken[accessTokenLength] = '\0';						// Null-terminate the string
 
 	return true;
 }
 
-const char* API::GetAccessToken() // maybe return char array
+const char *API::GetAccessToken() // maybe return char array
 {
 	char hostHttp[38] = "http://www.plantt.dk/api/v1/hub/login";
 
@@ -129,16 +118,9 @@ const char* API::GetAccessToken() // maybe return char array
 
 		return response.c_str();
 
-		/* login test = extractValuesFromLoginJson(response.c_str());
-		PrintLn("expireTs:");
-		PrintLn(test.expireTS);
-
-		PrintLn("accessToken:");
-		PrintLn(test.accessToken); */
-
 		if ((httpResponseCode >= 200 && httpResponseCode <= 204) || httpResponseCode == 307)
 		{
-			//result = true; TODO: handle this
+			// result = true; TODO: handle this
 		}
 		else if (httpResponseCode == 401)
 		{
@@ -153,7 +135,7 @@ const char* API::GetAccessToken() // maybe return char array
 	}
 
 	http.end(); // Free resources
-	return ""; //TODO: do something better here
+	return "";	// TODO: do something better here
 }
 
 /// @brief Post data to API, using http request.
@@ -161,14 +143,13 @@ const char* API::GetAccessToken() // maybe return char array
 /// @return boolean if succeeded.
 bool API::PostReadingsAPI(Readings readings)
 {
-	
+
 	if (!AccessTokenValid())
 	{
 		SetAccessToken();
 	}
 
 	bool result = false;
-	// char hostHttp[35] = "http://www.plantt.dk/api/v1/hub/";
 	char hostHttp[38] = "http://www.plantt.dk/api/v1/hub/ping";
 
 	char body[80] = "{\"Temperature\":";
@@ -180,9 +161,8 @@ bool API::PostReadingsAPI(Readings readings)
 	strcat(body, ",\"Moisture\":");
 	sprintf(body + strlen(body), "%d", readings.moisture);
 	strcat(body, "}");
+	PrintLn("body:");
 	PrintLn(body);
-
-	// sprintf(hostHttp + strlen(hostHttp), "%d", 7);
 
 	HTTPClient http;
 	http.begin(hostHttp);																																																																																					   // Specify destination for HTTP request

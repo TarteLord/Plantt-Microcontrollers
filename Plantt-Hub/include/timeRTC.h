@@ -22,8 +22,9 @@ public:
 	bool RTCValidate();
 	unsigned long GetEpochTime();
 
-	/* TimeRTC(const TimeRTC&) = delete; //delete copy constructor
-    TimeRTC& operator=(const TimeRTC&) = delete; //delete assignment constructor */
+	//Singleton specifics:
+	TimeRTC(const TimeRTC&) = delete; //delete copy constructor
+    TimeRTC& operator=(const TimeRTC&) = delete; //delete assignment constructor
 };
 
 #endif // TIMERTC

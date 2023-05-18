@@ -32,7 +32,7 @@ static BLEUUID sleepUUID("8d45ef7f-57b5-48f1-bf95-baf39be3442d");
 
 static boolean doConnect = false;
 static boolean connected = false;
-static boolean doScan = false;
+//static boolean doScan = false; TODO: Delete
 static boolean doneReading = true;
 
 static BLERemoteCharacteristic *pCharacteristicTemperature;
@@ -43,8 +43,6 @@ static BLERemoteCharacteristic *pCharacteristicSleep;
 
 BLEScan *pBLEScan;
 BLEClient *pClient;
-
-TimeRTC *pTimeRTC;
 
 static BLEAdvertisedDevice *myDevice;
 
@@ -280,7 +278,7 @@ void StopBLE()
 	esp_bt_controller_disable();
 	esp_bt_controller_deinit();
 }
-bool StopWIFI() {
+void StopWIFI() {
 	WiFi.disconnect();
 	WiFi.mode(WIFI_OFF);
 }
@@ -307,7 +305,9 @@ bool StartWIFI()
 	{
 		PrintL("Could not connect to wifi.");
 		// TODO: Save data for next time, since we can't connect to wifi.
+		return false;
 	}
+	return true;
 }
 
 int ReadBLEDevice()
@@ -349,7 +349,6 @@ int ReadBLEDevice()
 
 		if (WiFi.status() == WL_CONNECTED)
 		{
-			//API api(identity, secret, pTimeRTC);
 			API api(identity, secret);
 
 			if (!api.PostReadingsAPI(readings))
@@ -391,10 +390,9 @@ void setup()
 	if (WiFi.status() == WL_CONNECTED)
 	{
 		PrintLn("Connected to Wifi");
-		WiFiUDP ntpUDP;
-		TimeRTC* timeRTC = TimeRTC::GetInstance();
 		
-		//pTimeRTC = &timeRTC; //Assign the address to our pointer
+		//Initiate the RTC singleton
+		TimeRTC* timeRTC = TimeRTC::GetInstance();
 	}
 
 	StopWIFI();

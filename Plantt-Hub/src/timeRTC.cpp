@@ -1,6 +1,6 @@
 #include "timeRTC.h"
 
-TimeRTC* TimeRTC::instance = nullptr; 
+TimeRTC *TimeRTC::instance = nullptr;
 
 TimeRTC::TimeRTC() : _ntpClient(_ntpUDP, "dk.pool.ntp.org")
 {
@@ -11,13 +11,12 @@ TimeRTC::TimeRTC() : _ntpClient(_ntpUDP, "dk.pool.ntp.org")
 	UpdateRTC();
 }
 
-TimeRTC* TimeRTC::GetInstance() {
+TimeRTC *TimeRTC::GetInstance()
+{
 	if (instance == nullptr)
 	{
 		PrintLn("New instance");
 		instance = new TimeRTC();
-	} else { //TODO: Delete else, only for debugging
-		PrintLn("same instance");
 	}
 	return instance;
 }
@@ -29,18 +28,12 @@ TimeRTC::~TimeRTC()
 
 bool TimeRTC::UpdateRTC()
 {
-	PrintLn("Update RTC:")
-	bool result = false;
+	PrintLn("Update RTC:") bool result = false;
 	if (_ntpClient.update())
 	{
 		lastNTPEpoch = _ntpClient.getEpochTime();
 		lastNTPMillis = esp_timer_get_time() / 1000;
 		result = true;
-		
-		PrintLn("lastNTPEpoch:");
-		PrintLn(lastNTPEpoch);
-		PrintLn("lastNTPMillis:");
-		PrintLn(lastNTPMillis);
 	}
 
 	_ntpClient.end();
@@ -52,11 +45,13 @@ unsigned long TimeRTC::GetEpochTime()
 {
 	if (RTCValidate())
 	{
-		UpdateRTC();
+		if (!UpdateRTC())
+		{
+			delay(200);
+			UpdateRTC();
+		}
 	}
-	
-	PrintLn("GetEpochTime:")
-	PrintLn(lastNTPEpoch + ((esp_timer_get_time() / 1000) / 1000));
+
 	return lastNTPEpoch + ((esp_timer_get_time() / 1000) / 1000);
 }
 
@@ -69,11 +64,10 @@ bool TimeRTC::RTCValidate()
 	PrintLn("result:");
 	PrintLn((esp_timer_get_time() / 1000) - lastNTPMillis);
 
-
-	if (((esp_timer_get_time() / 1000) - lastNTPMillis) > 18000000)
+	if (((esp_timer_get_time() / 1000) - lastNTPMillis) > 18000000) // if older than 5 hours
 	{
 		return false;
 	}
-	
+
 	return true;
 }
