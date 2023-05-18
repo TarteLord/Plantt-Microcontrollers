@@ -1,10 +1,11 @@
 #include "time.h"
 
-namespace time
+namespace Time
 {
 
-    bool startRTC()
+    bool StartRTC()
     {
+        bool result = false;
         // Initialize the RTC module
         if (!rtc.begin())
         {
@@ -14,18 +15,29 @@ namespace time
         }
 
         ntpClient.begin();
-        ntpClient.update();
-
-        rtc.adjust(DateTime(ntpClient.getEpochTime()));
-
+        if (ntpClient.update())
+        {
+            rtc.adjust(DateTime(ntpClient.getEpochTime()));
+            result = true;
+        }
         ntpClient.end();
+        
+        return result;   
+
+
     }
-    bool updateRTC()
+    bool UpdateRTC()
     {
-        ntpClient.update();
+        bool result = false;
+        if (ntpClient.update())
+        {
+            rtc.adjust(DateTime(ntpClient.getEpochTime()));
+            result = true;
 
-        rtc.adjust(DateTime(ntpClient.getEpochTime()));
+        }
 
         ntpClient.end();
+
+        return result;
     }
 }

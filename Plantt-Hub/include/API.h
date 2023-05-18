@@ -17,23 +17,23 @@ private:
 
 	bool _loggedIn;
 	
-	const char* getAccessToken(const char *pIdentity, const char *pSecret);
-	bool validateLoginJson(const char *jsonString);
-	bool checkAccessToken();
+	const char* GetAccessToken(const char *pIdentity, const char *pSecret);
+	bool ValidateLoginJson(const char *jsonString);
+	bool CheckAccessToken();
 
 public:
 	API(const char *pIdentity, const char *pSecret);
 	~API();
 
-	bool postReadingsAPI(Readings readings);
-	bool setAccessToken(const char *pIdentity, const char *pSecret);
+	bool PostReadingsAPI(Readings readings);
+	bool SetAccessToken(const char *pIdentity, const char *pSecret);
 
-
+/* 
 	struct login
 	{
 		char accessToken[400];
 		char expireTS[30];
-	};
+	}; */
 
 
 	

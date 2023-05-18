@@ -81,7 +81,7 @@ class MyClientCallback : public BLEClientCallbacks
 /// @brief Checks if the Characteristics are present on the BLE service
 /// @param pRemoteService The service to check
 /// @return state of the check
-bool checkCharacteristic(BLERemoteService *pRemoteService)
+bool CheckCharacteristic(BLERemoteService *pRemoteService)
 {
 	// Obtain a reference to the characteristic in the service of the remote BLE server.
 
@@ -155,7 +155,7 @@ bool checkCharacteristic(BLERemoteService *pRemoteService)
 
 /// @brief Connect to BLE device and check Service and Characteristic are defined. 
 /// @return boolean on the state
-bool connectToServer()
+bool ConnectToServer()
 {
 	PrintL("Forming a connection to ");
 	PrintLn(myDevice->getAddress().toString().c_str());
@@ -180,7 +180,7 @@ bool connectToServer()
 	}
 	PrintLn(" - Found our service");
 
-	if (!checkCharacteristic(pRemoteService))
+	if (!CheckCharacteristic(pRemoteService))
 	{
 		return false;
 	}
@@ -190,7 +190,7 @@ bool connectToServer()
 
 /// @brief Reads all predefined characteristics on Plantt-Sensor
 /// @return A Readings struct containing data
-Readings readBLEData()
+Readings ReadBLEData()
 {
 	doneReading = false; //Lock in case of timeout in connection
 	Readings readings = {};
@@ -270,7 +270,7 @@ class AdvertisedBLECallbacks : public BLEAdvertisedDeviceCallbacks
 
 
 /// @brief initiate BLE and   scan and callback.
-void startBLE()
+void StartBLE()
 {
 	BLEDevice::init("");
 
@@ -281,14 +281,14 @@ void startBLE()
 	pBLEScan->setWindow(99); // less or equal setInterval value
 }
 
-void stopBLE()
+void StopBLE()
 {
 	btStop();
 	esp_bt_controller_disable();
 	esp_bt_controller_deinit();
 }
 
-int readBLEDevice()
+int ReadBLEDevice()
 {
 	// If the flag "doConnect" is true then we have scanned for and found the desired
 	// BLE Server with which we wish to connect.  Now we connect to it.  Once we are
@@ -296,7 +296,7 @@ int readBLEDevice()
 
 	if (doConnect == true)
 	{
-		if (connectToServer())
+		if (ConnectToServer())
 		{
 			PrintLn("We are now connected to the BLE Server.");
 		}
@@ -309,7 +309,7 @@ int readBLEDevice()
 
 	if (connected)
 	{
-		Readings readings = readBLEData();
+		Readings readings = ReadBLEData();
 
 		PrintLn("readings.humidity");
 		PrintLn(readings.humidity);
@@ -353,12 +353,12 @@ int readBLEDevice()
 			//API::getAccessToken(identity, secret); todo: delete
 			API api(identity, secret);
 			
-			if (!api.postReadingsAPI(readings))
+			if (!api.PostReadingsAPI(readings))
 			{
 				// Try again if we failed to post data.
 				delay(1000);
 				PrintL("Failed to post data to API");
-				api.postReadingsAPI(readings);
+				api.PostReadingsAPI(readings);
 			}
 		}
 	}
@@ -379,10 +379,13 @@ void setup()
 	
 	PrintLn("Starting Plantt Hub");
 	
-	time::startRTC();
-
+	if (Time::StartRTC())
+	{
+		PrintLn("Time succesfully started");
+	}
 	
-	startBLE();
+	
+	StartBLE();
 
 } // End of setup.
 
@@ -395,7 +398,7 @@ void loop()
 	pBLEScan->clearResults(); // delete results from BLEScan buffer to release memory
 	delay(2000); //TODO: Can we make this value smaler?
 
-	int value = readBLEDevice(); // TODO: redo this function
+	int value = ReadBLEDevice(); // TODO: redo this function
 
 	
 	delay(5000); // Delay a second between loops.

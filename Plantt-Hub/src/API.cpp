@@ -4,7 +4,7 @@
 
 API::API(const char *pIdentity, const char *pSecret) : _expireTS(NULL), _accessToken(""), _loggedIn(false)
 {
-	if (setAccessToken(pIdentity, pSecret))
+	if (SetAccessToken(pIdentity, pSecret))
 	{
 		PrintLn("Succesfully logged in");
 		_loggedIn = true;
@@ -16,11 +16,11 @@ API::~API()
 {
 }
 
-bool API::setAccessToken(const char *pIdentity, const char *pSecret) {
-	return API::validateLoginJson(getAccessToken(pIdentity, pSecret));
+bool API::SetAccessToken(const char *pIdentity, const char *pSecret) {
+	return API::ValidateLoginJson(GetAccessToken(pIdentity, pSecret));
 }
 
-bool API::checkAccessToken() {
+bool API::CheckAccessToken() {
 	if (1 == 2)
 	{
 		/* code */
@@ -28,7 +28,7 @@ bool API::checkAccessToken() {
 	
 }
 
-bool API::validateLoginJson(const char *jsonString)
+bool API::ValidateLoginJson(const char *jsonString)
 {
 	const char *expireTSStart = strstr(jsonString, "\"expireTs\":\"");
 	if (expireTSStart == nullptr)
@@ -82,7 +82,7 @@ bool API::validateLoginJson(const char *jsonString)
 	return true;
 }
 
-const char* API::getAccessToken(const char *pIdentity, const char *pSecret) // maybe return char array
+const char* API::GetAccessToken(const char *pIdentity, const char *pSecret) // maybe return char array
 {
 	bool result = false;
 	char hostHttp[38] = "http://www.plantt.dk/api/v1/hub/login";
@@ -146,7 +146,7 @@ const char* API::getAccessToken(const char *pIdentity, const char *pSecret) // m
 /// @brief Post data to API, using http request.
 /// @param readings
 /// @return boolean if succeeded.
-bool API::postReadingsAPI(Readings readings)
+bool API::PostReadingsAPI(Readings readings)
 {
 	bool result = false;
 	// char hostHttp[35] = "http://www.plantt.dk/api/v1/hub/";
