@@ -5,17 +5,17 @@
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 
-namespace TimeRTC
+class TimeRTC
 {
-	WiFiUDP ntpUDP;
-	NTPClient ntpClient(ntpUDP, "dk.pool.ntp.org"); // NTP server for clock.
+private:
+	NTPClient _ntpClient; // NTP server for clock.
+	RTC_DS3231 _rtc; // Real time clock.
+public:
+	TimeRTC(WiFiUDP *ntpUDP);
+	~TimeRTC();
 
-	RTC_DS3231 rtc; // Real time clock.
-
-	bool StartRTC();
 	bool UpdateRTC();
-
 	unsigned long GetEpochTime();
-}
+};
 
-#endif // TIME
+#endif // TIMERTC

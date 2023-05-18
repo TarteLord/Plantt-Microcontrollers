@@ -1,50 +1,48 @@
 #include "timeRTC.h"
 
-namespace TimeRTC
+TimeRTC::TimeRTC(WiFiUDP *ntpUDP) : _ntpClient(*ntpUDP, "dk.pool.ntp.org")
 {
-
-	bool StartRTC()
+	// Initialize the RTC module
+	if (!_rtc.begin())
 	{
-		bool result = false;
-		// Initialize the RTC module
-		if (!rtc.begin())
-		{
-			Serial.println("Failed to initialize RTC");
-			delay(1000);
-			ESP.restart();
-		}
-
-		ntpClient.begin();
-		if (ntpClient.update())
-		{
-			rtc.adjust(DateTime(ntpClient.getEpochTime()));
-			result = true;
-		}
-		ntpClient.end();
-
-		return result;
-	}
-	bool UpdateRTC()
-	{
-		bool result = false;
-		if (ntpClient.update())
-		{
-			rtc.adjust(DateTime(ntpClient.getEpochTime()));
-			result = true;
-		}
-
-		ntpClient.end();
-
-		return result;
+		Serial.println("Failed to initialize RTC");
+		delay(1000);
+		ESP.restart();
 	}
 
-	unsigned long GetEpochTime()
+	_ntpClient.begin();
+	if (_ntpClient.update())
 	{
-		if (rtc.lostPower())
-		{
-			UpdateRTC();
-		}
-
-		return rtc.now().unixtime();
+		_rtc.adjust(DateTime(_ntpClient.getEpochTime()));
 	}
+	_ntpClient.end();
+}
+
+TimeRTC::~TimeRTC()
+{
+	_ntpClient.end();
+}
+
+bool TimeRTC::UpdateRTC()
+{
+	bool result = false;
+	if (_ntpClient.update())
+	{
+		_rtc.adjust(DateTime(_ntpClient.getEpochTime()));
+		result = true;
+	}
+
+	_ntpClient.end();
+
+	return result;
+}
+
+unsigned long TimeRTC::GetEpochTime()
+{
+	if (_rtc.lostPower())
+	{
+		UpdateRTC();
+	}
+
+	return _rtc.now().unixtime();
 }

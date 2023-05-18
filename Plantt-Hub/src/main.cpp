@@ -2,7 +2,8 @@
 #include <BLEDevice.h>
 #include <Arduino.h>
 #include <inttypes.h>
-//#include <HTTPClient.h>
+#include <SPI.h>
+// #include <HTTPClient.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include "preprocessors.h"
@@ -16,11 +17,9 @@ const char *password = "Abekat123";
 const char *identity = "O9HpT_OYWm2FbvVko7y32yy2";
 const char *secret = "uIrHT1U540GaaTM4sCefJjgS-kSn0neL3fK8k-QDyLijq1HCtCPAp7xVO7DUP-EW";
 
-
 char accessToken[400] = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJhYTZlNDYwZi05NjczLTRiNjktOWI2ZS0wZGVmY2Q4N2RhYTYiLCJzdWIiOiJPOUhwVF9PWVdtMkZidlZrbzd5MzJ5eTIiLCJpc3MiOiJpc3N1ZXIuY29tIiwicm9sZSI6IlRva2VuIiwibmJmIjoxNjg0MjM2MjIwLCJleHAiOjE2ODQyMzk4MjAsImlhdCI6MTY4NDIzNjIyMH0.6Pl-UXWhQm163COVYwA8CpyKAWAa4-EVd6NH_BDXpY8";
-char expireTS [30] = "2023-05-16T12:26:03.5627978Z";
-// static BLEUUID sensors[5] = {BLEUUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b"), BLEUUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b")};
-
+char expireTS[30] = "2023-05-16T12:26:03.5627978Z";
+// static BLEUUID sensors[5] = {BLEUUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b"), BLEUUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b")}
 // The remote service we wish to connect to.
 static BLEUUID serviceUUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
 
@@ -45,9 +44,9 @@ static BLERemoteCharacteristic *pCharacteristicSleep;
 BLEScan *pBLEScan;
 BLEClient *pClient;
 
+TimeRTC *pTimeRTC;
+
 static BLEAdvertisedDevice *myDevice;
-
-
 
 /// @brief Tracks state of the BLE Client.
 class MyClientCallback : public BLEClientCallbacks
@@ -67,10 +66,9 @@ class MyClientCallback : public BLEClientCallbacks
 			PrintLn("Was disruppet unexpectexly");
 			doneReading = true;
 
-			//reboot since there apparently is not other way.
+			// reboot since there apparently is not other way.
 			ESP.restart();
 		}
-		
 	}
 };
 
@@ -149,7 +147,7 @@ bool CheckCharacteristic(BLERemoteService *pRemoteService)
 	return true;
 }
 
-/// @brief Connect to BLE device and check Service and Characteristic are defined. 
+/// @brief Connect to BLE device and check Service and Characteristic are defined.
 /// @return boolean on the state
 bool ConnectToServer()
 {
@@ -188,7 +186,7 @@ bool ConnectToServer()
 /// @return A Readings struct containing data
 Readings ReadBLEData()
 {
-	doneReading = false; //Lock in case of timeout in connection
+	doneReading = false; // Lock in case of timeout in connection
 	Readings readings = {};
 	//----------------------------------------------------------------------------------------------
 	// Read the value of temperature from the characteristic.
@@ -250,8 +248,8 @@ class AdvertisedBLECallbacks : public BLEAdvertisedDeviceCallbacks
 {
 	void onResult(BLEAdvertisedDevice advertisedDevice)
 	{
-		//PrintL("BLE Advertised Device found: ");
-		//PrintLn(advertisedDevice.toString().c_str());
+		// PrintL("BLE Advertised Device found: ");
+		// PrintLn(advertisedDevice.toString().c_str());
 
 		if (advertisedDevice.getServiceUUID().equals(serviceUUID))
 		{
@@ -263,7 +261,6 @@ class AdvertisedBLECallbacks : public BLEAdvertisedDeviceCallbacks
 		}
 	}
 };
-
 
 /// @brief initiate BLE and   scan and callback.
 void StartBLE()
@@ -282,6 +279,35 @@ void StopBLE()
 	btStop();
 	esp_bt_controller_disable();
 	esp_bt_controller_deinit();
+}
+bool StopWIFI() {
+	WiFi.disconnect();
+	WiFi.mode(WIFI_OFF);
+}
+
+bool StartWIFI()
+{
+	WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
+	WiFi.setHostname("ESP32 Hub");
+	WiFi.mode(WIFI_STA);		// Station mode.
+	WiFi.begin(ssid, password); // Connect to Wifi AP
+	delay(100);
+
+	int wifiAttemps = 0;
+
+	while (WiFi.status() != WL_CONNECTED && wifiAttemps <= 20)
+	{
+		delay(200);
+		wifiAttemps++;
+		PrintL("Not connected to wifi, attempt: ");
+		PrintLn(wifiAttemps);
+	}
+
+	if (wifiAttemps >= 21)
+	{
+		PrintL("Could not connect to wifi.");
+		// TODO: Save data for next time, since we can't connect to wifi.
+	}
 }
 
 int ReadBLEDevice()
@@ -316,39 +342,14 @@ int ReadBLEDevice()
 		PrintLn("readings.lux");
 		PrintLn(readings.lux);
 
-		//esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
-		
+		// esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
 
-		//Connect to WIFI.
-		WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
-		WiFi.setHostname("ESP32 Hub");
-		WiFi.mode(WIFI_STA);		// Station mode.
-		WiFi.begin(ssid, password); // Connect to Wifi AP
-		delay(100);
-
-		int wifiAttemps = 0;
-
-		while (WiFi.status() != WL_CONNECTED && wifiAttemps <= 20)
-		{
-			delay(200);
-			wifiAttemps++;
-			PrintL("Not connected to wifi, attempt: ");
-			PrintLn(wifiAttemps);
-		}
-
-		if (wifiAttemps >= 21)
-		{
-			PrintL("Could not connect to wifi.");
-			//TODO: Save data for next time, since we can't connect to wifi.
-		}
-		
+		// Connect to WIFI.
 
 		if (WiFi.status() == WL_CONNECTED)
 		{
-			
-			//API::getAccessToken(identity, secret); todo: delete
-			API api(identity, secret);
-			
+			API api(identity, secret, pTimeRTC);
+
 			if (!api.PostReadingsAPI(readings))
 			{
 				// Try again if we failed to post data.
@@ -359,8 +360,7 @@ int ReadBLEDevice()
 		}
 	}
 
-	WiFi.disconnect();
-	WiFi.mode(WIFI_OFF);
+	StopWIFI();
 	return 0;
 }
 
@@ -372,15 +372,27 @@ void setup()
 		delay(1000);
 	}
 
-	
 	PrintLn("Starting Plantt Hub");
-	
-	if (TimeRTC::StartRTC())
+
+
+	if (!StartWIFI())
 	{
-		PrintLn("Time succesfully started");
+		delay(2000);
+		StartWIFI();
+	} 
+	
+	if (WiFi.status() == WL_CONNECTED)
+	{
+		WiFiUDP ntpUDP;
+		TimeRTC timeRTC(&ntpUDP);
+		*pTimeRTC = timeRTC;
 	}
-	
-	
+
+	StopWIFI();
+	delay(1000);
+
+	//TODO: Handle if no wifi
+
 	StartBLE();
 
 } // End of setup.
@@ -392,10 +404,9 @@ void loop()
 	PrintLn(foundDevices.getCount());
 	PrintLn("Scan done!");
 	pBLEScan->clearResults(); // delete results from BLEScan buffer to release memory
-	delay(2000); //TODO: Can we make this value smaler?
+	delay(2000);			  // TODO: Can we make this value smaler?
 
 	int value = ReadBLEDevice(); // TODO: redo this function
 
-	
 	delay(5000); // Delay a second between loops.
 } // End of loop

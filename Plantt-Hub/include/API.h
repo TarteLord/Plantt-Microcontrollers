@@ -13,21 +13,28 @@ private:
 	char _accessToken[400];
 	char expireTS[30];
 	unsigned long _expireTS;
-	unsigned long _epochTime;
-
+	//unsigned long _epochTime;
 
 	bool _loggedIn;
+
+	//Maybe make identity and secret into pointers, depends on spiffs
+	const char *_identity;
+	const char *_secret;
+
+	TimeRTC *_timeRTC;
+
+
 	
-	const char* GetAccessToken(const char *pIdentity, const char *pSecret);
+	const char* GetAccessToken();
 	bool ValidateLoginJson(const char *jsonString);
 	bool AccessTokenValid();
 
 public:
-	API(const char *pIdentity, const char *pSecret);
+	API(const char *pIdentity, const char *pSecret, TimeRTC *timeRTC);
 	~API();
 
 	bool PostReadingsAPI(Readings readings);
-	bool SetAccessToken(const char *pIdentity, const char *pSecret);
+	bool SetAccessToken();
 
 	
 };

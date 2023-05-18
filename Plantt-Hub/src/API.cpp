@@ -1,28 +1,23 @@
-
 #include "API.h"
 
-
-API::API(const char *pIdentity, const char *pSecret) : _accessToken(""), expireTS(""), _expireTS(NULL),  _loggedIn(false)
+API::API(const char *pIdentity, const char *pSecret, TimeRTC *timeRTC) : _accessToken(""), expireTS(""), _expireTS(NULL),  _loggedIn(false), _identity(pIdentity), _secret(pSecret),_timeRTC(timeRTC)
 {
-	if (SetAccessToken(pIdentity, pSecret))
+	if (SetAccessToken())
 	{
 		PrintLn("Succesfully logged in");
-		_loggedIn = true;
-	}
-	
+	}	
 }
 
 API::~API()
 {
 }
 
-bool API::SetAccessToken(const char *pIdentity, const char *pSecret) {
-	return API::ValidateLoginJson(GetAccessToken(pIdentity, pSecret));
+bool API::SetAccessToken() {
+	return API::ValidateLoginJson(GetAccessToken());
 }
 
-
 bool API::AccessTokenValid() {
-	if (TimeRTC::GetEpochTime() < (_expireTS + 600))
+	if (_timeRTC->GetEpochTime() < (_expireTS /*+ 600 */))
 	{
 		return false;
 	}
@@ -83,18 +78,17 @@ bool API::ValidateLoginJson(const char *jsonString)
 	return true;
 }
 
-const char* API::GetAccessToken(const char *pIdentity, const char *pSecret) // maybe return char array
+const char* API::GetAccessToken() // maybe return char array
 {
-	bool result = false;
 	char hostHttp[38] = "http://www.plantt.dk/api/v1/hub/login";
 
 	char body[280] = "{\"identity\":";
 	strcat(body, "\"");
-	strcat(body, pIdentity);
+	strcat(body, _identity);
 	strcat(body, "\"");
 	strcat(body, ",\"secret\":");
 	strcat(body, "\"");
-	strcat(body, pSecret);
+	strcat(body, _secret);
 	strcat(body, "\"");
 	strcat(body, "}");
 	strcat(body, "");
@@ -126,7 +120,7 @@ const char* API::GetAccessToken(const char *pIdentity, const char *pSecret) // m
 
 		if ((httpResponseCode >= 200 && httpResponseCode <= 204) || httpResponseCode == 307)
 		{
-			result = true;
+			//result = true; TODO: handle this
 		}
 		else if (httpResponseCode == 401)
 		{
@@ -141,7 +135,7 @@ const char* API::GetAccessToken(const char *pIdentity, const char *pSecret) // m
 	}
 
 	http.end(); // Free resources
-
+	return ""; //TODO: do something better here
 }
 
 /// @brief Post data to API, using http request.
@@ -149,6 +143,12 @@ const char* API::GetAccessToken(const char *pIdentity, const char *pSecret) // m
 /// @return boolean if succeeded.
 bool API::PostReadingsAPI(Readings readings)
 {
+	
+	if (!AccessTokenValid())
+	{
+		SetAccessToken();
+	}
+
 	bool result = false;
 	// char hostHttp[35] = "http://www.plantt.dk/api/v1/hub/";
 	char hostHttp[38] = "http://www.plantt.dk/api/v1/hub/ping";
