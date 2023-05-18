@@ -1,12 +1,21 @@
 #include "API.h"
 
-API::API(const char *pIdentity, const char *pSecret, TimeRTC *timeRTC) : _accessToken(""), expireTS(""), _expireTS(NULL),  _loggedIn(false), _identity(pIdentity), _secret(pSecret),_timeRTC(timeRTC)
+// API::API(const char *pIdentity, const char *pSecret, TimeRTC *timeRTC) : _accessToken(""), expireTS(""), _expireEpoch(NULL),  _loggedIn(false), _identity(pIdentity), _secret(pSecret),_timeRTC(timeRTC)
+// {
+// 	if (SetAccessToken())
+// 	{
+// 		PrintLn("Succesfully logged in");
+// 	}	
+// }
+
+API::API(const char *pIdentity, const char *pSecret) : _accessToken(""), expireTS(""), _expireEpoch(NULL),  _loggedIn(false), _identity(pIdentity), _secret(pSecret)
 {
 	if (SetAccessToken())
 	{
 		PrintLn("Succesfully logged in");
 	}	
 }
+
 
 API::~API()
 {
@@ -17,7 +26,14 @@ bool API::SetAccessToken() {
 }
 
 bool API::AccessTokenValid() {
-	if (_timeRTC->GetEpochTime() < (_expireTS /*+ 600 */))
+	/* PrintLn("RTC EPOCH TIME:");
+	PrintLn(_timeRTC->GetEpochTime()); */
+	PrintLn("expire EPOCH TIME:");
+	PrintLn(_expireEpoch);
+
+	TimeRTC* timertc = TimeRTC::GetInstance();
+
+	if (timertc->GetEpochTime() < (_expireEpoch /*+ 600 */))
 	{
 		return false;
 	}
@@ -26,34 +42,36 @@ bool API::AccessTokenValid() {
 
 bool API::ValidateLoginJson(const char *jsonString)
 {
-	const char *expireTSStart = strstr(jsonString, "\"expireTs\":\"");
-	if (expireTSStart == nullptr)
+	char *expireStart = strstr(jsonString, "\"expire\":");
+	delay(10);
+	if (expireStart == nullptr)
 	{
-		PrintLn("expireTs not found.");
+		PrintLn("expire not found."); //TODO: why are we sometimes hitting this????
 		return false;
 	}
-	expireTSStart += strlen("\"expireTs\":\""); // Move to the start of the value
+	expireStart += strlen("\"expire\":"); // Move to the start of the value
 
-	const char *expireTsEnd = strchr(expireTSStart, '\"');
-	if (expireTsEnd == nullptr)
+	const char *expireEnd = strchr(expireStart, ',');
+	if (expireEnd == nullptr)
 	{
-		PrintLn("Invalid expireTs value.");
+		PrintLn("Invalid expire value.");
 		return false;
 	}
 
-	size_t expireTSLength = expireTsEnd - expireTSStart;
-	strncpy(expireTS, expireTSStart, expireTSLength); // Add the value to our result
-	expireTS[expireTSLength] = '\0';	// Null-terminate the string
-	
-	//TODO: VALIDATE THIS WORKS; WHEN WE GET EPOCH TIME.
+	size_t expiereLength = expireEnd - expireStart;
+	char expireBuffer[11] = "";
+	strncpy(expireBuffer, expireStart, expiereLength); // Add the value to our result
+	expireBuffer[expiereLength] = '\0';	// Null-terminate the string
 
 	char* endPtr;
-	_expireTS = strtoul(expireTS, &endPtr, 10);
+	_expireEpoch = strtoul(expireBuffer, &endPtr, 10);
 
 	if (*endPtr != '\0') {
         // Error occurred during conversion
         PrintLn("Error: Invalid number format!");
     }
+	PrintLn("ExpireEpoch long");
+	PrintLn(_expireEpoch);
 
 
 	const char *accessTokenStart = strstr(jsonString, "\"accessToken\":\"");

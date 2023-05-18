@@ -6,7 +6,11 @@
         "functional": "cpp",
         "tuple": "cpp",
         "type_traits": "cpp",
-        "utility": "cpp"
+        "utility": "cpp",
+        "fstream": "cpp",
+        "sstream": "cpp",
+        "stdexcept": "cpp",
+        "typeinfo": "cpp"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }

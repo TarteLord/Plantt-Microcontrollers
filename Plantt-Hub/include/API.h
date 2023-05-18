@@ -12,7 +12,7 @@ class API
 private:
 	char _accessToken[400];
 	char expireTS[30];
-	unsigned long _expireTS;
+	unsigned long _expireEpoch;
 	//unsigned long _epochTime;
 
 	bool _loggedIn;
@@ -21,7 +21,7 @@ private:
 	const char *_identity;
 	const char *_secret;
 
-	TimeRTC *_timeRTC;
+	//TimeRTC *_timeRTC;
 
 
 	
@@ -30,7 +30,8 @@ private:
 	bool AccessTokenValid();
 
 public:
-	API(const char *pIdentity, const char *pSecret, TimeRTC *timeRTC);
+	//API(const char *pIdentity, const char *pSecret, TimeRTC *timeRTC);
+	API(const char *pIdentity, const char *pSecret);
 	~API();
 
 	bool PostReadingsAPI(Readings readings);

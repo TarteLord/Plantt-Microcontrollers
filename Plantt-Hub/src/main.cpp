@@ -345,10 +345,12 @@ int ReadBLEDevice()
 		// esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
 
 		// Connect to WIFI.
+		StartWIFI();
 
 		if (WiFi.status() == WL_CONNECTED)
 		{
-			API api(identity, secret, pTimeRTC);
+			//API api(identity, secret, pTimeRTC);
+			API api(identity, secret);
 
 			if (!api.PostReadingsAPI(readings))
 			{
@@ -372,20 +374,27 @@ void setup()
 		delay(1000);
 	}
 
+	delay(2000);	
 	PrintLn("Starting Plantt Hub");
-
 
 	if (!StartWIFI())
 	{
 		delay(2000);
 		StartWIFI();
 	} 
+
+	// while (WiFi.status() != WL_CONNECTED)
+	// {
+	// 	StartWIFI();
+	// }
 	
 	if (WiFi.status() == WL_CONNECTED)
 	{
+		PrintLn("Connected to Wifi");
 		WiFiUDP ntpUDP;
-		TimeRTC timeRTC(&ntpUDP);
-		*pTimeRTC = timeRTC;
+		TimeRTC* timeRTC = TimeRTC::GetInstance();
+		
+		//pTimeRTC = &timeRTC; //Assign the address to our pointer
 	}
 
 	StopWIFI();

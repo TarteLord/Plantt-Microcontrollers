@@ -1,21 +1,25 @@
 #include "timeRTC.h"
 
-TimeRTC::TimeRTC(WiFiUDP *ntpUDP) : _ntpClient(*ntpUDP, "dk.pool.ntp.org")
+TimeRTC* TimeRTC::instance = nullptr; 
+
+TimeRTC::TimeRTC() : _ntpClient(_ntpUDP, "dk.pool.ntp.org")
 {
-	// Initialize the RTC module
-	if (!_rtc.begin())
-	{
-		Serial.println("Failed to initialize RTC");
-		delay(1000);
-		ESP.restart();
-	}
+	PrintLn("Init RTC");
 
 	_ntpClient.begin();
-	if (_ntpClient.update())
+
+	UpdateRTC();
+}
+
+TimeRTC* TimeRTC::GetInstance() {
+	if (instance == nullptr)
 	{
-		_rtc.adjust(DateTime(_ntpClient.getEpochTime()));
+		PrintLn("New instance");
+		instance = new TimeRTC();
+	} else { //TODO: Delete else, only for debugging
+		PrintLn("same instance");
 	}
-	_ntpClient.end();
+	return instance;
 }
 
 TimeRTC::~TimeRTC()
@@ -25,11 +29,18 @@ TimeRTC::~TimeRTC()
 
 bool TimeRTC::UpdateRTC()
 {
+	PrintLn("Update RTC:")
 	bool result = false;
 	if (_ntpClient.update())
 	{
-		_rtc.adjust(DateTime(_ntpClient.getEpochTime()));
+		lastNTPEpoch = _ntpClient.getEpochTime();
+		lastNTPMillis = esp_timer_get_time() / 1000;
 		result = true;
+		
+		PrintLn("lastNTPEpoch:");
+		PrintLn(lastNTPEpoch);
+		PrintLn("lastNTPMillis:");
+		PrintLn(lastNTPMillis);
 	}
 
 	_ntpClient.end();
@@ -39,10 +50,30 @@ bool TimeRTC::UpdateRTC()
 
 unsigned long TimeRTC::GetEpochTime()
 {
-	if (_rtc.lostPower())
+	if (RTCValidate())
 	{
 		UpdateRTC();
 	}
+	
+	PrintLn("GetEpochTime:")
+	PrintLn(lastNTPEpoch + ((esp_timer_get_time() / 1000) / 1000));
+	return lastNTPEpoch + ((esp_timer_get_time() / 1000) / 1000);
+}
 
-	return _rtc.now().unixtime();
+bool TimeRTC::RTCValidate()
+{
+	PrintLn("lastNTPMillis:");
+	PrintLn(lastNTPMillis);
+	PrintLn("millis():");
+	PrintLn((esp_timer_get_time() / 1000));
+	PrintLn("result:");
+	PrintLn((esp_timer_get_time() / 1000) - lastNTPMillis);
+
+
+	if (((esp_timer_get_time() / 1000) - lastNTPMillis) > 18000000)
+	{
+		return false;
+	}
+	
+	return true;
 }
