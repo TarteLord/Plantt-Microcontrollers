@@ -28,11 +28,13 @@ TimeRTC::~TimeRTC()
 
 bool TimeRTC::UpdateRTC()
 {
-	PrintLn("Update RTC:") bool result = false;
+	PrintLn("Update RTC:");
+	bool result = false;
 	if (_ntpClient.update())
 	{
 		lastNTPEpoch = _ntpClient.getEpochTime();
 		lastNTPMillis = esp_timer_get_time() / 1000;
+		PrintLn("Updated RTC:");
 		result = true;
 	}
 
@@ -43,7 +45,7 @@ bool TimeRTC::UpdateRTC()
 
 unsigned long TimeRTC::GetEpochTime()
 {
-	if (RTCValidate())
+	if (!RTCValidate())
 	{
 		if (!UpdateRTC())
 		{
@@ -57,15 +59,10 @@ unsigned long TimeRTC::GetEpochTime()
 
 bool TimeRTC::RTCValidate()
 {
-	PrintLn("lastNTPMillis:");
-	PrintLn(lastNTPMillis);
-	PrintLn("millis():");
-	PrintLn((esp_timer_get_time() / 1000));
-	PrintLn("result:");
-	PrintLn((esp_timer_get_time() / 1000) - lastNTPMillis);
-
 	if (((esp_timer_get_time() / 1000) - lastNTPMillis) > 18000000) // if older than 5 hours
 	{
+		PrintLn("RTCValidate:");
+
 		return false;
 	}
 

@@ -43,6 +43,7 @@ static BLERemoteCharacteristic *pCharacteristicSleep;
 
 BLEScan *pBLEScan;
 BLEClient *pClient;
+API* api;
 
 static BLEAdvertisedDevice *myDevice;
 
@@ -333,14 +334,14 @@ int ReadBLEDevice()
 	{
 		Readings readings = ReadBLEData();
 
-		PrintLn("readings.humidity");
+		/* PrintLn("readings.humidity");
 		PrintLn(readings.humidity);
 		PrintLn("readings.temperature");
 		PrintLn(readings.temperature);
 		PrintLn("readings.moisture");
 		PrintLn(readings.moisture);
 		PrintLn("readings.lux");
-		PrintLn(readings.lux);
+		PrintLn(readings.lux); */
 
 		// esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
 
@@ -349,14 +350,13 @@ int ReadBLEDevice()
 
 		if (WiFi.status() == WL_CONNECTED)
 		{
-			API api(identity, secret);
 
-			if (!api.PostReadingsAPI(readings))
+			if (!api->PostReadingsAPI(readings))
 			{
 				// Try again if we failed to post data.
 				delay(1000);
 				PrintL("Failed to post data to API");
-				api.PostReadingsAPI(readings);
+				api->PostReadingsAPI(readings);
 			}
 		}
 	}
@@ -393,6 +393,8 @@ void setup()
 		
 		//Initiate the RTC singleton
 		TimeRTC* timeRTC = TimeRTC::GetInstance();
+
+		api = new API(identity, secret); //TODO: maybe make it into singleton
 	}
 
 	StopWIFI();
@@ -415,5 +417,5 @@ void loop()
 
 	int value = ReadBLEDevice(); // TODO: redo this function
 
-	delay(5000); // Delay a second between loops.
+	delay(1000 * 30); // Delay a second between loops.
 } // End of loop

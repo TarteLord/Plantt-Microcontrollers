@@ -1,6 +1,6 @@
 #include "API.h"
 
-API::API(const char *pIdentity, const char *pSecret) : _accessToken(""), _expireEpoch(0), _loggedIn(false), _identity(pIdentity), _secret(pSecret)
+API::API(const char *pIdentity, const char *pSecret) : _accessToken(""), _expireEpoch(0), _identity(pIdentity), _secret(pSecret)
 {
 	if (SetAccessToken())
 	{
@@ -19,8 +19,9 @@ bool API::SetAccessToken()
 
 bool API::AccessTokenValid()
 {
-
 	TimeRTC *timertc = TimeRTC::GetInstance();
+	PrintLn("Get Epoch Time:");
+	PrintLn(timertc->GetEpochTime());
 
 	if (timertc->GetEpochTime() < (_expireEpoch /*+ 600 */))
 	{
@@ -122,11 +123,6 @@ const char *API::GetAccessToken() // maybe return char array
 		{
 			// result = true; TODO: handle this
 		}
-		else if (httpResponseCode == 401)
-		{
-			_loggedIn = false;
-			// TODO: Handle not logged in.
-		}
 	}
 	else
 	{
@@ -150,7 +146,7 @@ bool API::PostReadingsAPI(Readings readings)
 	}
 
 	bool result = false;
-	char hostHttp[38] = "http://www.plantt.dk/api/v1/hub/ping";
+	char hostHttp[38] = "http://www.plantt.dk/api/v1/hub/ping2";
 
 	char body[80] = "{\"Temperature\":";
 	sprintf(body + strlen(body), "%.1f", readings.temperature);
@@ -166,8 +162,11 @@ bool API::PostReadingsAPI(Readings readings)
 
 	HTTPClient http;
 	http.begin(hostHttp);																																																																																					   // Specify destination for HTTP request
-	http.addHeader("Content-Type", "application/json");																																																																														   // Specify content-type header
-	http.addHeader("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIxNGNmZTY1Ni05NTJkLTQwODMtYWE2YS00OGM2ZWY4MTM2MTgiLCJzdWIiOiIwMDJhNmE4Mi03OWVhLWVkMTEtOGFhNS0xYzg3MmM2MDRhM2IiLCJpc3MiOiJpc3N1ZXIuY29tIiwicm9sZSI6IlByZW1pdW0iLCJuYmYiOjE2ODQyMjI5MDQsImV4cCI6MTY4NDIyMzgwNCwiaWF0IjoxNjg0MjIyOTA0fQ.MO50kBLJkkbck-2-6f2BQeJ_fLFFuGFmnNJxNBB-J6U"); // Specify content-type header
+	http.addHeader("Content-Type", "application/json");
+	
+	char bearer[408] = "Bearer ";// Specify content-type header
+	strcat(bearer, _accessToken);
+	http.addHeader("Authorization", bearer); // Specify content-type header
 	int httpResponseCode = http.POST(body);
 
 	if (httpResponseCode > 0)
@@ -185,7 +184,9 @@ bool API::PostReadingsAPI(Readings readings)
 		}
 		else if (httpResponseCode == 401)
 		{
-			_loggedIn = false;
+			http.end();
+			SetAccessToken();
+			PostReadingsAPI(readings);
 			// TODO: Handle not logged in.
 		}
 	}
