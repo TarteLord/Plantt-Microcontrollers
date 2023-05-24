@@ -14,7 +14,29 @@ API::~API()
 
 bool API::SetAccessToken()
 {
-	return API::ValidateLoginJson(GetAccessToken());
+	const char* response = GetAccessToken();
+
+	PrintLn("SetAccessToken_");
+	PrintLn(response);
+
+
+	//Det sker noget weird, når vi henter vores accesstoken, prøv at bruge string istedet og se om det virker.
+
+
+	//This seems odd, but it handles a edge case.
+	//I suspect the HttpClient to be the culprit
+	if (strcmp(response, "") == 0)
+	{
+		PrintLn("response is \" ");
+		response = GetAccessToken();
+	}
+	if (strcmp(response, "") == 0)
+	{
+		PrintLn("response is still \", return false");
+		return false;
+	}
+	
+	return API::ValidateLoginJson(response);
 }
 
 bool API::AccessTokenValid()
@@ -30,16 +52,22 @@ bool API::AccessTokenValid()
 	return true;
 }
 
-bool API::ValidateLoginJson(const char *jsonString)
+bool API::ValidateLoginJson(const char* jsonString)
 {
-	char *expireStart = strstr(jsonString, "\"expire\":");
-	delay(10);
+	PrintLn("ValidateLoginJson");
+	PrintLn(jsonString);
+
+	char *expireStart = strstr(jsonString, "{\"expire\":");
+
 	if (expireStart == nullptr)
 	{
-		PrintLn("expire not found."); // TODO: why are we sometimes hitting this????
+		//Sometimes we are hitting this, where everything seems fine.
+		//I have no idea why
+		//JsonString seems legit only happens once in a blue moon
+		PrintLn("expire not found."); 
 		return false;
 	}
-	expireStart += strlen("\"expire\":"); // Move to the start of the value
+	expireStart += strlen("{\"expire\":"); // Move to the start of the value
 
 	const char *expireEnd = strchr(expireStart, ',');
 	if (expireEnd == nullptr)
@@ -49,9 +77,9 @@ bool API::ValidateLoginJson(const char *jsonString)
 	}
 
 	size_t expiereLength = expireEnd - expireStart;
-	char expireBuffer[11] = "";
+	char* expireBuffer = new char[12]; //12 since epoch time, we could settle with 10. 
 	strncpy(expireBuffer, expireStart, expiereLength); // Add the value to our result
-	expireBuffer[expiereLength] = '\0';				   // Null-terminate the string
+	expireBuffer[expiereLength] = '\0';	// Null-terminate the string
 
 	char *endPtr;
 	_expireEpoch = strtoul(expireBuffer, &endPtr, 10);
@@ -60,6 +88,8 @@ bool API::ValidateLoginJson(const char *jsonString)
 	{
 		// Error occurred during conversion
 		PrintLn("Error: Invalid number format!");
+		delete[] expireBuffer;
+		return false;
 	}
 	PrintLn("ExpireEpoch long");
 	PrintLn(_expireEpoch);
@@ -68,6 +98,7 @@ bool API::ValidateLoginJson(const char *jsonString)
 	if (accessTokenStart == nullptr)
 	{
 		PrintLn("accessToken not found.");
+		delete[] expireBuffer;
 		return false;
 	}
 	accessTokenStart += strlen("\"accessToken\":\""); // Move to the start of the value
@@ -76,6 +107,7 @@ bool API::ValidateLoginJson(const char *jsonString)
 	if (accessTokenEnd == nullptr)
 	{
 		PrintLn("Invalid accessToken value.");
+		delete[] expireBuffer;
 		return false;
 	}
 
@@ -83,11 +115,16 @@ bool API::ValidateLoginJson(const char *jsonString)
 	strncpy(_accessToken, accessTokenStart, accessTokenLength); // Add the value to our result
 	_accessToken[accessTokenLength] = '\0';						// Null-terminate the string
 
+	delete[] expireBuffer;
+
 	return true;
 }
 
-const char *API::GetAccessToken() // maybe return char array
+/// @brief Get our accessToken using our identity and secret.
+/// @return the response
+const char* API::GetAccessToken()
 {
+	const char* response;
 	char hostHttp[38] = "http://www.plantt.dk/api/v1/hub/login";
 
 	char body[280] = "{\"identity\":";
@@ -110,28 +147,28 @@ const char *API::GetAccessToken() // maybe return char array
 
 	if (httpResponseCode > 0)
 	{
-		String response = http.getString(); // Get the response to the request
-
 		PrintLn("httpResponseCode:");
 		PrintLn(httpResponseCode); // Print return code
-		PrintLn("response:");
-		PrintLn(response); // Print request answer
-
-		return response.c_str();
-
+		
 		if ((httpResponseCode >= 200 && httpResponseCode <= 204) || httpResponseCode == 307)
 		{
-			// result = true; TODO: handle this
+			response = http.getString().c_str();
+			PrintLn("response:");
+			PrintLn(response); // Print request answer
 		}
 	}
 	else
 	{
 		PrintL("Error on sending POST: ");
 		PrintLn(httpResponseCode); // Print return code
+		response = "";
 	}
 
 	http.end(); // Free resources
-	return "";	// TODO: do something better here
+	//http.~HTTPClient();
+
+	
+	return response;
 }
 
 /// @brief Post data to API, using http request.
