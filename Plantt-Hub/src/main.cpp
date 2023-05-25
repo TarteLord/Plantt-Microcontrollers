@@ -274,10 +274,12 @@ void StartBLE()
 }
 
 void StopBLE()
-{
+{	
+	BLEDevice::deinit();
 	btStop();
 	esp_bt_controller_disable();
 	esp_bt_controller_deinit();
+	//esp_bt_controller_mem_release(ESP_BT_MODE_BTDM); prob not needed.
 }
 void StopWIFI()
 {
@@ -335,34 +337,32 @@ int ReadBLEDevice()
 	{
 		Readings readings = ReadBLEData();
 
-		/* PrintLn("readings.humidity");
-		PrintLn(readings.humidity);
-		PrintLn("readings.temperature");
-		PrintLn(readings.temperature);
-		PrintLn("readings.moisture");
-		PrintLn(readings.moisture);
-		PrintLn("readings.lux");
-		PrintLn(readings.lux); */
-
-		// esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
+		StopBLE();
 
 		// Connect to WIFI.
 		StartWIFI();
 
 		if (WiFi.status() == WL_CONNECTED)
-		{
+		{	
+			int httpResponseCode = api->PostReadingsAPI(readings);
 
-			if (!api->PostReadingsAPI(readings))
+			if ((httpResponseCode >= 200 && httpResponseCode <= 204) || httpResponseCode == 307)
 			{
-				// Try again if we failed to post data.
-				delay(1000);
-				PrintL("Failed to post data to API");
+				PrintLn("PostReadingsAPI succes");
+			}
+			else
+			{
+				PrintLn("Something went wrong, try again in 200");
+				delay(200);
 				api->PostReadingsAPI(readings);
+
+				//TODO: if this fails, lets save the information and try again, with the next request.
 			}
 		}
 	}
 
 	StopWIFI();
+	StartBLE();
 	return 0;
 }
 
@@ -418,5 +418,5 @@ void loop()
 
 	int value = ReadBLEDevice(); // TODO: redo this function
 
-	delay(1000 * 30); // Delay a second between loops.
+	delay(1000); // Delay a second between loops.
 } // End of loop

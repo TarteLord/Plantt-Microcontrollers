@@ -22,11 +22,15 @@ bool API::AccessTokenValid()
 	TimeRTC *timertc = TimeRTC::GetInstance();
 	PrintLn("Get Epoch Time:");
 	PrintLn(timertc->GetEpochTime());
+	PrintLn("Get _expireEpoch Time:");
+	PrintLn(_expireEpoch);
 
-	if (timertc->GetEpochTime() < (_expireEpoch /*+ 600 */))
+	if (timertc->GetEpochTime() >= (_expireEpoch /*+ 600 */))
 	{
+		PrintLn("AccessTokenValid false");
 		return false;
 	}
+	PrintLn("AccessTokenValid true");
 	return true;
 }
 
@@ -83,8 +87,9 @@ String API::GetAccessToken()
 	strcat(body, "");
 	PrintLn(body);
 
+	WiFiClient *wifi = new WiFiClientFixed();
 	HTTPClient http;
-	http.begin(hostHttp);								// Specify destination for HTTP request
+	http.begin(*wifi, hostHttp);						// Specify destination for HTTP request
 	http.addHeader("Content-Type", "application/json"); // Specify content-type header
 
 	int httpResponseCode = http.POST(body);
@@ -109,14 +114,15 @@ String API::GetAccessToken()
 	}
 
 	http.end(); // Free resources
+	delete wifi;
 
 	return response;
 }
 
 /// @brief Post data to API, using http request.
 /// @param readings
-/// @return boolean if succeeded.
-bool API::PostReadingsAPI(Readings readings)
+/// @return http response codee
+int API::PostReadingsAPI(Readings readings)
 {
 
 	if (!AccessTokenValid())
@@ -124,7 +130,7 @@ bool API::PostReadingsAPI(Readings readings)
 		SetAccessToken();
 	}
 
-	bool result = false;
+	int httpResponseCode = 0;
 	char hostHttp[38] = "http://www.plantt.dk/api/v1/hub/ping2";
 
 	char body[80] = "{\"Temperature\":";
@@ -139,43 +145,20 @@ bool API::PostReadingsAPI(Readings readings)
 	PrintLn("body:");
 	PrintLn(body);
 
+	WiFiClient *wifi = new WiFiClientFixed();
 	HTTPClient http;
-	http.begin(hostHttp); // Specify destination for HTTP request
+	http.begin(*wifi, hostHttp);
+
+	// http.begin(hostHttp); // Specify destination for HTTP request
 	http.addHeader("Content-Type", "application/json");
 
 	char bearer[408] = "Bearer "; // Specify content-type header
 	strcat(bearer, _accessToken);
 	http.addHeader("Authorization", bearer); // Specify content-type header
-	int httpResponseCode = http.POST(body);
-
-	if (httpResponseCode > 0)
-	{
-		String response = http.getString(); // Get the response to the request
-
-		PrintLn("httpResponseCode:");
-		PrintL(httpResponseCode); // Print return code
-		PrintLn("response:");
-		PrintLn(response); // Print request answer
-
-		if ((httpResponseCode >= 200 && httpResponseCode <= 204) || httpResponseCode == 307)
-		{
-			result = true;
-		}
-		else if (httpResponseCode == 401)
-		{
-			http.end();
-			SetAccessToken();
-			PostReadingsAPI(readings);
-			// TODO: Handle not logged in.
-		}
-	}
-	else
-	{
-		PrintL("Error on sending POST: ");
-		PrintLn(httpResponseCode); // Print return code
-	}
+	httpResponseCode = http.POST(body);
 
 	http.end(); // Free resources
+	delete wifi;
 
-	return result;
+	return httpResponseCode;
 }

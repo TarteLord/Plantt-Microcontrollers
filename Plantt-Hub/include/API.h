@@ -6,6 +6,7 @@
 #include "preprocessors.h"
 #include "readings.h"
 #include "timeRTC.h"
+#include "wifiFix.h"
 
 class API
 {
@@ -25,7 +26,7 @@ public:
 	API(const char *pIdentity, const char *pSecret);
 	~API();
 
-	bool PostReadingsAPI(Readings readings);
+	int PostReadingsAPI(Readings readings);
 	bool SetAccessToken();
 };
 
