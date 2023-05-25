@@ -412,11 +412,12 @@ void setup()
 
 void loop()
 {
+	//To get more clearity on exceptions, try: https://github.com/me-no-dev/EspExceptionDecoder
 	BLEScanResults foundDevices = pBLEScan->start(5, false);
 	PrintL("Devices found: ");
 	PrintLn(foundDevices.getCount());
 	PrintLn("Scan done!");
-	//pBLEScan->clearResults(); // delete results from BLEScan buffer to release memory
+	//pBLEScan->clearResults(); // delete results from BLEScan buffer to release memory. This maybe removed a exception
 	delay(2000);			  // TODO: Can we make this value smaler?
 
 	int value = ReadBLEDevice(); // TODO: redo this function
