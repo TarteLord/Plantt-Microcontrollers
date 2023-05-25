@@ -13,11 +13,13 @@ private:
 	char _accessToken[400];
 	unsigned long _expireEpoch;
 
-	//Maybe make identity and secret into pointers, depends on spiffs
+	// Maybe make identity and secret into pointers, depends on spiffs
 	const char *_identity;
 	const char *_secret;
-	
-	const char* GetAccessToken();
+
+	const char *GetAccessToken();
+	String GetAccessTokenString();
+	bool ValidateLoginJsonString(String jsonString);
 	bool ValidateLoginJson(const char *jsonString);
 	bool AccessTokenValid();
 
@@ -26,7 +28,7 @@ public:
 	~API();
 
 	bool PostReadingsAPI(Readings readings);
-	bool SetAccessToken();	
+	bool SetAccessToken();
 };
 
 #endif // API_H

@@ -14,6 +14,8 @@ API::~API()
 
 bool API::SetAccessToken()
 {
+	/* Old GetAccessToken
+
 	const char* response = GetAccessToken();
 
 	PrintLn("SetAccessToken_");
@@ -34,9 +36,15 @@ bool API::SetAccessToken()
 	{
 		PrintLn("response is still \", return false");
 		return false;
-	}
-	
-	return API::ValidateLoginJson(response);
+	} */
+
+	String response = GetAccessTokenString();
+
+	PrintLn("SetAccessTokenString_");
+	PrintLn(response);
+
+
+	return API::ValidateLoginJsonString(response);
 }
 
 bool API::AccessTokenValid()
@@ -52,7 +60,7 @@ bool API::AccessTokenValid()
 	return true;
 }
 
-bool API::ValidateLoginJson(const char* jsonString)
+bool API::ValidateLoginJson(const char *jsonString)
 {
 	PrintLn("ValidateLoginJson");
 	PrintLn(jsonString);
@@ -61,10 +69,10 @@ bool API::ValidateLoginJson(const char* jsonString)
 
 	if (expireStart == nullptr)
 	{
-		//Sometimes we are hitting this, where everything seems fine.
-		//I have no idea why
-		//JsonString seems legit only happens once in a blue moon
-		PrintLn("expire not found."); 
+		// Sometimes we are hitting this, where everything seems fine.
+		// I have no idea why
+		// JsonString seems legit only happens once in a blue moon
+		PrintLn("expire not found.");
 		return false;
 	}
 	expireStart += strlen("{\"expire\":"); // Move to the start of the value
@@ -77,9 +85,9 @@ bool API::ValidateLoginJson(const char* jsonString)
 	}
 
 	size_t expiereLength = expireEnd - expireStart;
-	char* expireBuffer = new char[12]; //12 since epoch time, we could settle with 10. 
+	char *expireBuffer = new char[12];				   // 12 since epoch time, we could settle with 10.
 	strncpy(expireBuffer, expireStart, expiereLength); // Add the value to our result
-	expireBuffer[expiereLength] = '\0';	// Null-terminate the string
+	expireBuffer[expiereLength] = '\0';				   // Null-terminate the string
 
 	char *endPtr;
 	_expireEpoch = strtoul(expireBuffer, &endPtr, 10);
@@ -120,11 +128,47 @@ bool API::ValidateLoginJson(const char* jsonString)
 	return true;
 }
 
+bool API::ValidateLoginJsonString(String jsonString)
+{
+	const String expireKey = "\"expire\":";
+	const String accessTokenKey = "\"accessToken\":\"";
+
+	// Find the position of "expire" key
+	int expireStart = jsonString.indexOf("\"expire\":");
+	if (expireStart == -1)
+	{
+		Serial.println("Failed to find 'expire' key in JSON string");
+		return false;
+	}
+
+	// Find the position of "accessToken" key
+	int accessTokenStart = jsonString.indexOf(accessTokenKey);
+	if (accessTokenStart == -1)
+	{
+		Serial.println("Failed to find 'accessToken' key in JSON string");
+		return false;
+	}
+
+	// Extract the value of "expire"
+	int expireValueStart = expireStart + expireKey.length();
+	int expireValueEnd = jsonString.indexOf(',', expireValueStart);
+	_expireEpoch = jsonString.substring(expireValueStart, expireValueEnd).toInt(); //make signed long
+	//String expireValue = jsonString.substring(expireValueStart, expireValueEnd);
+
+	// Extract the value of "accessToken"
+	int accessTokenValueStart = accessTokenStart + accessTokenKey.length();
+	int accessTokenValueEnd = jsonString.indexOf('"', accessTokenValueStart);
+	jsonString.substring(accessTokenValueStart, accessTokenValueEnd).toCharArray(_accessToken,400,0);
+	//String accessTokenValue = jsonString.substring(accessTokenValueStart, accessTokenValueEnd);
+
+	return true;
+}
+
 /// @brief Get our accessToken using our identity and secret.
 /// @return the response
-const char* API::GetAccessToken()
+const char *API::GetAccessToken()
 {
-	const char* response;
+	const char *response;
 	char hostHttp[38] = "http://www.plantt.dk/api/v1/hub/login";
 
 	char body[280] = "{\"identity\":";
@@ -149,7 +193,7 @@ const char* API::GetAccessToken()
 	{
 		PrintLn("httpResponseCode:");
 		PrintLn(httpResponseCode); // Print return code
-		
+
 		if ((httpResponseCode >= 200 && httpResponseCode <= 204) || httpResponseCode == 307)
 		{
 			response = http.getString().c_str();
@@ -165,9 +209,58 @@ const char* API::GetAccessToken()
 	}
 
 	http.end(); // Free resources
-	//http.~HTTPClient();
+	// http.~HTTPClient();
 
-	
+	return response;
+}
+
+/// @brief Get our accessToken using our identity and secret.
+/// @return the response
+String API::GetAccessTokenString()
+{
+	String response = "";
+	char hostHttp[38] = "http://www.plantt.dk/api/v1/hub/login";
+
+	char body[280] = "{\"identity\":";
+	strcat(body, "\"");
+	strcat(body, _identity);
+	strcat(body, "\"");
+	strcat(body, ",\"secret\":");
+	strcat(body, "\"");
+	strcat(body, _secret);
+	strcat(body, "\"");
+	strcat(body, "}");
+	strcat(body, "");
+	PrintLn(body);
+
+	HTTPClient http;
+	http.begin(hostHttp);								// Specify destination for HTTP request
+	http.addHeader("Content-Type", "application/json"); // Specify content-type header
+
+	int httpResponseCode = http.POST(body);
+
+	if (httpResponseCode > 0)
+	{
+		PrintLn("httpResponseCode:");
+		PrintLn(httpResponseCode); // Print return code
+
+		if ((httpResponseCode >= 200 && httpResponseCode <= 204) || httpResponseCode == 307)
+		{
+			response = http.getString().c_str();
+			PrintLn("response:");
+			PrintLn(response); // Print request answer
+		}
+	}
+	else
+	{
+		PrintL("Error on sending POST: ");
+		PrintLn(httpResponseCode); // Print return code
+		response = "";
+	}
+
+	http.end(); // Free resources
+	// http.~HTTPClient();
+
 	return response;
 }
 
@@ -198,10 +291,10 @@ bool API::PostReadingsAPI(Readings readings)
 	PrintLn(body);
 
 	HTTPClient http;
-	http.begin(hostHttp);																																																																																					   // Specify destination for HTTP request
+	http.begin(hostHttp); // Specify destination for HTTP request
 	http.addHeader("Content-Type", "application/json");
-	
-	char bearer[408] = "Bearer ";// Specify content-type header
+
+	char bearer[408] = "Bearer "; // Specify content-type header
 	strcat(bearer, _accessToken);
 	http.addHeader("Authorization", bearer); // Specify content-type header
 	int httpResponseCode = http.POST(body);
