@@ -279,7 +279,6 @@ void StopBLE()
 	btStop();
 	esp_bt_controller_disable();
 	esp_bt_controller_deinit();
-	//esp_bt_controller_mem_release(ESP_BT_MODE_BTDM); prob not needed.
 }
 void StopWIFI()
 {
