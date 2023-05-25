@@ -8,9 +8,9 @@
 	#define PrintLn(x) (Serial.println(x));
 	#define PrintF(x, y) (Serial.printf(x, y));
 #else
-	#define PrintL(x);
-	#define PrintLn(x);
-	#define PrintF(x, y);
+	#define PrintL(x) ;
+	#define PrintLn(x) ;
+	#define PrintF(x, y) ;
 #endif
 
-#endif //PRERPOCESSERS
+#endif // PRERPOCESSERS

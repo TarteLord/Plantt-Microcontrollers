@@ -14,37 +14,7 @@ API::~API()
 
 bool API::SetAccessToken()
 {
-	/* Old GetAccessToken
-
-	const char* response = GetAccessToken();
-
-	PrintLn("SetAccessToken_");
-	PrintLn(response);
-
-
-	//Det sker noget weird, når vi henter vores accesstoken, prøv at bruge string istedet og se om det virker.
-
-
-	//This seems odd, but it handles a edge case.
-	//I suspect the HttpClient to be the culprit
-	if (strcmp(response, "") == 0)
-	{
-		PrintLn("response is \" ");
-		response = GetAccessToken();
-	}
-	if (strcmp(response, "") == 0)
-	{
-		PrintLn("response is still \", return false");
-		return false;
-	} */
-
-	String response = GetAccessTokenString();
-
-	PrintLn("SetAccessTokenString_");
-	PrintLn(response);
-
-
-	return API::ValidateLoginJsonString(response);
+	return API::ValidateLoginJson(GetAccessToken());
 }
 
 bool API::AccessTokenValid()
@@ -60,75 +30,7 @@ bool API::AccessTokenValid()
 	return true;
 }
 
-bool API::ValidateLoginJson(const char *jsonString)
-{
-	PrintLn("ValidateLoginJson");
-	PrintLn(jsonString);
-
-	char *expireStart = strstr(jsonString, "{\"expire\":");
-
-	if (expireStart == nullptr)
-	{
-		// Sometimes we are hitting this, where everything seems fine.
-		// I have no idea why
-		// JsonString seems legit only happens once in a blue moon
-		PrintLn("expire not found.");
-		return false;
-	}
-	expireStart += strlen("{\"expire\":"); // Move to the start of the value
-
-	const char *expireEnd = strchr(expireStart, ',');
-	if (expireEnd == nullptr)
-	{
-		PrintLn("Invalid expire value.");
-		return false;
-	}
-
-	size_t expiereLength = expireEnd - expireStart;
-	char *expireBuffer = new char[12];				   // 12 since epoch time, we could settle with 10.
-	strncpy(expireBuffer, expireStart, expiereLength); // Add the value to our result
-	expireBuffer[expiereLength] = '\0';				   // Null-terminate the string
-
-	char *endPtr;
-	_expireEpoch = strtoul(expireBuffer, &endPtr, 10);
-
-	if (*endPtr != '\0')
-	{
-		// Error occurred during conversion
-		PrintLn("Error: Invalid number format!");
-		delete[] expireBuffer;
-		return false;
-	}
-	PrintLn("ExpireEpoch long");
-	PrintLn(_expireEpoch);
-
-	const char *accessTokenStart = strstr(jsonString, "\"accessToken\":\"");
-	if (accessTokenStart == nullptr)
-	{
-		PrintLn("accessToken not found.");
-		delete[] expireBuffer;
-		return false;
-	}
-	accessTokenStart += strlen("\"accessToken\":\""); // Move to the start of the value
-
-	const char *accessTokenEnd = strchr(accessTokenStart, '\"');
-	if (accessTokenEnd == nullptr)
-	{
-		PrintLn("Invalid accessToken value.");
-		delete[] expireBuffer;
-		return false;
-	}
-
-	size_t accessTokenLength = accessTokenEnd - accessTokenStart;
-	strncpy(_accessToken, accessTokenStart, accessTokenLength); // Add the value to our result
-	_accessToken[accessTokenLength] = '\0';						// Null-terminate the string
-
-	delete[] expireBuffer;
-
-	return true;
-}
-
-bool API::ValidateLoginJsonString(String jsonString)
+bool API::ValidateLoginJson(String jsonString)
 {
 	const String expireKey = "\"expire\":";
 	const String accessTokenKey = "\"accessToken\":\"";
@@ -152,71 +54,19 @@ bool API::ValidateLoginJsonString(String jsonString)
 	// Extract the value of "expire"
 	int expireValueStart = expireStart + expireKey.length();
 	int expireValueEnd = jsonString.indexOf(',', expireValueStart);
-	_expireEpoch = jsonString.substring(expireValueStart, expireValueEnd).toInt(); //make signed long
-	//String expireValue = jsonString.substring(expireValueStart, expireValueEnd);
+	_expireEpoch = jsonString.substring(expireValueStart, expireValueEnd).toInt(); // make signed long
 
 	// Extract the value of "accessToken"
 	int accessTokenValueStart = accessTokenStart + accessTokenKey.length();
 	int accessTokenValueEnd = jsonString.indexOf('"', accessTokenValueStart);
-	jsonString.substring(accessTokenValueStart, accessTokenValueEnd).toCharArray(_accessToken,400,0);
-	//String accessTokenValue = jsonString.substring(accessTokenValueStart, accessTokenValueEnd);
+	jsonString.substring(accessTokenValueStart, accessTokenValueEnd).toCharArray(_accessToken, 400, 0);
 
 	return true;
 }
 
 /// @brief Get our accessToken using our identity and secret.
 /// @return the response
-const char *API::GetAccessToken()
-{
-	const char *response;
-	char hostHttp[38] = "http://www.plantt.dk/api/v1/hub/login";
-
-	char body[280] = "{\"identity\":";
-	strcat(body, "\"");
-	strcat(body, _identity);
-	strcat(body, "\"");
-	strcat(body, ",\"secret\":");
-	strcat(body, "\"");
-	strcat(body, _secret);
-	strcat(body, "\"");
-	strcat(body, "}");
-	strcat(body, "");
-	PrintLn(body);
-
-	HTTPClient http;
-	http.begin(hostHttp);								// Specify destination for HTTP request
-	http.addHeader("Content-Type", "application/json"); // Specify content-type header
-
-	int httpResponseCode = http.POST(body);
-
-	if (httpResponseCode > 0)
-	{
-		PrintLn("httpResponseCode:");
-		PrintLn(httpResponseCode); // Print return code
-
-		if ((httpResponseCode >= 200 && httpResponseCode <= 204) || httpResponseCode == 307)
-		{
-			response = http.getString().c_str();
-			PrintLn("response:");
-			PrintLn(response); // Print request answer
-		}
-	}
-	else
-	{
-		PrintL("Error on sending POST: ");
-		PrintLn(httpResponseCode); // Print return code
-		response = "";
-	}
-
-	http.end(); // Free resources
-	// http.~HTTPClient();
-
-	return response;
-}
-
-/// @brief Get our accessToken using our identity and secret.
-/// @return the response
-String API::GetAccessTokenString()
+String API::GetAccessToken()
 {
 	String response = "";
 	char hostHttp[38] = "http://www.plantt.dk/api/v1/hub/login";
@@ -259,7 +109,6 @@ String API::GetAccessTokenString()
 	}
 
 	http.end(); // Free resources
-	// http.~HTTPClient();
 
 	return response;
 }

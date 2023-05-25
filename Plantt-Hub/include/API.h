@@ -17,10 +17,8 @@ private:
 	const char *_identity;
 	const char *_secret;
 
-	const char *GetAccessToken();
-	String GetAccessTokenString();
-	bool ValidateLoginJsonString(String jsonString);
-	bool ValidateLoginJson(const char *jsonString);
+	String GetAccessToken();
+	bool ValidateLoginJson(String jsonString);
 	bool AccessTokenValid();
 
 public:

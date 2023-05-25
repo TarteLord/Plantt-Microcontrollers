@@ -32,7 +32,7 @@ static BLEUUID sleepUUID("8d45ef7f-57b5-48f1-bf95-baf39be3442d");
 
 static boolean doConnect = false;
 static boolean connected = false;
-//static boolean doScan = false; TODO: Delete
+// static boolean doScan = false; TODO: Delete
 static boolean doneReading = true;
 
 static BLERemoteCharacteristic *pCharacteristicTemperature;
@@ -43,7 +43,7 @@ static BLERemoteCharacteristic *pCharacteristicSleep;
 
 BLEScan *pBLEScan;
 BLEClient *pClient;
-API* api;
+API *api;
 
 static BLEAdvertisedDevice *myDevice;
 
@@ -279,7 +279,8 @@ void StopBLE()
 	esp_bt_controller_disable();
 	esp_bt_controller_deinit();
 }
-void StopWIFI() {
+void StopWIFI()
+{
 	WiFi.disconnect();
 	WiFi.mode(WIFI_OFF);
 }
@@ -373,34 +374,34 @@ void setup()
 		delay(1000);
 	}
 
-	delay(2000);	
+	delay(2000);
 	PrintLn("Starting Plantt Hub");
 
 	if (!StartWIFI())
 	{
 		delay(2000);
 		StartWIFI();
-	} 
+	}
 
 	// while (WiFi.status() != WL_CONNECTED)
 	// {
 	// 	StartWIFI();
 	// }
-	
+
 	if (WiFi.status() == WL_CONNECTED)
 	{
 		PrintLn("Connected to Wifi");
-		
-		//Initiate the RTC singleton
-		TimeRTC* timeRTC = TimeRTC::GetInstance();
 
-		api = new API(identity, secret); //TODO: maybe make it into singleton
+		// Initiate the RTC singleton
+		TimeRTC *timeRTC = TimeRTC::GetInstance();
+
+		api = new API(identity, secret); // TODO: maybe make it into singleton
 	}
 
 	StopWIFI();
 	delay(1000);
 
-	//TODO: Handle if no wifi
+	// TODO: Handle if no wifi
 
 	StartBLE();
 
