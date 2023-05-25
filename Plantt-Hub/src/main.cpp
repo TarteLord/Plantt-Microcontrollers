@@ -276,14 +276,16 @@ void StartBLE()
 void StopBLE()
 {	
 	BLEDevice::deinit();
-	btStop();
-	esp_bt_controller_disable();
-	esp_bt_controller_deinit();
+ 	//btStop(); //TODO: do we need this or
+/*	esp_bt_controller_disable();
+	esp_bt_controller_deinit(); */
+	delay(100);
 }
 void StopWIFI()
 {
 	WiFi.disconnect();
 	WiFi.mode(WIFI_OFF);
+	delay(100);
 }
 
 bool StartWIFI()
@@ -343,7 +345,9 @@ int ReadBLEDevice()
 
 		if (WiFi.status() == WL_CONNECTED)
 		{	
-			int httpResponseCode = api->PostReadingsAPI(readings);
+			int tempSensorID = 1;
+
+			int httpResponseCode = api->PostReadingsAPI(readings, tempSensorID);
 
 			if ((httpResponseCode >= 200 && httpResponseCode <= 204) || httpResponseCode == 307)
 			{
@@ -353,7 +357,7 @@ int ReadBLEDevice()
 			{
 				PrintLn("Something went wrong, try again in 200");
 				delay(200);
-				api->PostReadingsAPI(readings);
+				api->PostReadingsAPI(readings, tempSensorID);
 
 				//TODO: if this fails, lets save the information and try again, with the next request.
 			}
@@ -412,7 +416,7 @@ void loop()
 	PrintL("Devices found: ");
 	PrintLn(foundDevices.getCount());
 	PrintLn("Scan done!");
-	pBLEScan->clearResults(); // delete results from BLEScan buffer to release memory
+	//pBLEScan->clearResults(); // delete results from BLEScan buffer to release memory
 	delay(2000);			  // TODO: Can we make this value smaler?
 
 	int value = ReadBLEDevice(); // TODO: redo this function

@@ -122,7 +122,7 @@ String API::GetAccessToken()
 /// @brief Post data to API, using http request.
 /// @param readings
 /// @return http response codee
-int API::PostReadingsAPI(Readings readings)
+int API::PostReadingsAPI(Readings readings, int sensorID)
 {
 
 	if (!AccessTokenValid())
@@ -131,15 +131,17 @@ int API::PostReadingsAPI(Readings readings)
 	}
 
 	int httpResponseCode = 0;
-	char hostHttp[38] = "http://www.plantt.dk/api/v1/hub/ping2";
+	char hostHttp[38] = "http://www.plantt.dk/api/v1/hub/Data";
 
-	char body[80] = "{\"Temperature\":";
+	char body[82] = "{\"sensorId\":";
+	sprintf(body + strlen(body), "%d", sensorID);
+	strcat(body, ",\"temperature\":");
 	sprintf(body + strlen(body), "%.1f", readings.temperature);
-	strcat(body, ",\"Humidity\":");
+	strcat(body, ",\"humidity\":");
 	sprintf(body + strlen(body), "%.1f", readings.humidity);
-	strcat(body, ",\"Lux\":");
+	strcat(body, ",\"lux\":");
 	sprintf(body + strlen(body), "%.1f", readings.lux);
-	strcat(body, ",\"Moisture\":");
+	strcat(body, ",\"moisture\":");
 	sprintf(body + strlen(body), "%d", readings.moisture);
 	strcat(body, "}");
 	PrintLn("body:");

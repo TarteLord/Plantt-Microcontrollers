@@ -26,7 +26,7 @@ public:
 	API(const char *pIdentity, const char *pSecret);
 	~API();
 
-	int PostReadingsAPI(Readings readings);
+	int PostReadingsAPI(Readings readings, int sensorID);
 	bool SetAccessToken();
 };
 
