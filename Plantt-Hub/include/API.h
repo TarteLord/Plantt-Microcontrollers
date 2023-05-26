@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include "preprocessors.h"
-#include "readings.h"
+#include "reading.h"
 #include "timeRTC.h"
 #include "wifiFix.h"
 
@@ -26,7 +26,7 @@ public:
 	API(const char *pIdentity, const char *pSecret);
 	~API();
 
-	int PostReadingsAPI(Readings readings, int sensorID);
+	int PostReadingAPI(Reading readings, int sensorID);
 	bool SetAccessToken();
 };
 

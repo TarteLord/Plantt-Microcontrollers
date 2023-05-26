@@ -90,9 +90,9 @@ TempAndHumidity Sensor::ReadTempAndHumidity()
 
 /// @brief reads Temperature, Humidity, Lux, and soil moisture from sensors.
 /// @return A struct containing Temperature, Humidity, Lux, and soil moisture
-Sensor::Readings Sensor::getSensorData()
+Reading Sensor::getSensorData()
 {
-    Readings result;
+    Reading result;
 
     float luxReading = ReadLux();
     if (luxReading == 0.0f)

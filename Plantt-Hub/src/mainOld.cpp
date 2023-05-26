@@ -7,7 +7,7 @@
 // #include <WiFi.h>
 // #include <WiFiUdp.h>
 // #include "preprocessors.h"
-// #include "readings.h"
+// #include "reading.h"
 // #include "API.h"
 // #include "timeRTC.h"
 
@@ -180,11 +180,11 @@
 // }
 
 // /// @brief Reads all predefined characteristics on Plantt-Sensor
-// /// @return A Readings struct containing data
-// Readings ReadBLEData()
+// /// @return A Reading struct containing data
+// Reading ReadBLEData()
 // {
 // 	doneReading = false; // Lock in case of timeout in connection
-// 	Readings readings = {};
+// 	Reading readings = {};
 // 	//----------------------------------------------------------------------------------------------
 // 	// Read the value of temperature from the characteristic.
 // 	//----------------------------------------------------------------------------------------------
@@ -334,7 +334,7 @@
 
 // 	if (connected)
 // 	{
-// 		Readings readings = ReadBLEData();
+// 		Reading readings = ReadBLEData();
 
 // 		StopBLE();
 
@@ -345,7 +345,7 @@
 // 		{	
 // 			int tempSensorID = 1;
 
-// 			int httpResponseCode = api->PostReadingsAPI(readings, tempSensorID);
+// 			int httpResponseCode = api->PostReadingAPI(readings, tempSensorID);
 
 // 			if ((httpResponseCode >= 200 && httpResponseCode <= 204) || httpResponseCode == 307)
 // 			{
@@ -355,7 +355,7 @@
 // 			{
 // 				PrintLn("Something went wrong, try again in 200");
 // 				delay(200);
-// 				api->PostReadingsAPI(readings, tempSensorID);
+// 				api->PostReadingAPI(readings, tempSensorID);
 
 // 				//TODO: if this fails, lets save the information and try again, with the next request.
 // 			}
@@ -410,8 +410,7 @@
 
 // void loop()
 // {
-// 	BLEScanResults foundDevices = pBLEScan->start(5, false);
-// 	PrintL("Devices found: ");
+// 	BLEScanResults foundDevices = pBLEScan->start(5, false); 
 // 	PrintLn(foundDevices.getCount());
 // 	PrintLn("Scan done!");
 // 	//pBLEScan->clearResults(); // delete results from BLEScan buffer to release memory

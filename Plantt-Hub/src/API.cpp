@@ -122,7 +122,7 @@ String API::GetAccessToken()
 /// @brief Post data to API, using http request.
 /// @param readings
 /// @return http response codee
-int API::PostReadingsAPI(Readings readings, int sensorID)
+int API::PostReadingAPI(Reading readings, int sensorID)
 {
 
 	if (!AccessTokenValid())

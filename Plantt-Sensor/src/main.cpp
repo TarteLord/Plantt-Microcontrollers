@@ -16,7 +16,7 @@ static BLEUUID temperatureUUID("a3c0cf09-d1d8-421e-a3f8-e3d7dad17ba6");
 static BLEUUID humidityUUID("46cb85fb-eb1e-4a21-b661-0a1d9478d302");
 static BLEUUID moistureUUID("beb5483e-36e1-4688-b7f5-ea07361b26a8");
 static BLEUUID luxUUID("1af7ac38-7aac-40ee-901f-942bd87f47b1");
-static BLEUUID sleepUUID("8d45ef7f-57b5-48f1-bf95-baf39be3442d");
+static BLEUUID doneReadingUUID("8d45ef7f-57b5-48f1-bf95-baf39be3442d");
 static BLEUUID currentDeviceUUID("960d74fe-b9c1-485f-ad3c-224a7e57a37f");
 
 static BLERemoteCharacteristic *pCharacteristicTemperature;
@@ -37,27 +37,52 @@ const int buttonPin = 32;
 
 static boolean doneReading = true;
 bool broadcastStarted = false;
-bool clientConnected = false;
+bool serverConnected = false;
+bool doConnect = false;
 
 uint32_t sensorID = 1;
+Reading reading = {};
 
 #define uS_TO_S_FACTOR 1000000
 // #define TIME_TO_SLEEP 1200
 #define TIME_TO_SLEEP 8
+
+void setActiveMode()
+{
+	setCpuFrequencyMhz(240);
+	adc_power_on();
+	delay(100);
+	btStart();
+}
+
+void hibernation()
+{
+	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
+	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF);
+	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF);
+	esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_OFF);
+	esp_deep_sleep_start();
+}
 
 class BLECallbacks : public BLEClientCallbacks
 {
 	void onConnect(BLEClient *pServer)
 	{
 		PrintLn("A client has connected");
-		clientConnected = true;
+		serverConnected = true;
 	}
 
 	void onDisconnect(BLEClient *pServer)
 	{
 		PrintLn("A client has disconnected");
-		clientConnected = false;
-		if (doneReading == false)
+		
+		PrintLn("Millis onDisconnect");
+		PrintLn(millis());
+		serverConnected = false;
+		BLEDevice::stopAdvertising();
+		delay(100);
+		hibernation();
+		if (doneReading == false) //DO we need this?
 		{
 			PrintLn("Was disruppet unexpectexly");
 			doneReading = true;
@@ -107,22 +132,7 @@ void setModemSleep()
 	// setCpuFrequencyMhz(40); //TODO: Try with this later, when the communication part is done.
 }
 
-void setActiveMode()
-{
-	setCpuFrequencyMhz(240);
-	adc_power_on();
-	delay(100);
-	btStart();
-}
 
-void hibernation()
-{
-	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
-	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF);
-	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF);
-	esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_OFF);
-	esp_deep_sleep_start();
-}
 
 /// @brief Checks if the Characteristics are present on the BLE service
 /// @param pRemoteService The service to check
@@ -184,17 +194,30 @@ bool CheckCharacteristic(BLERemoteService *pRemoteService)
 	PrintLn(" - Found our characteristic for Lux");
 
 	//----------------------------------------------------------------------------------------------
-	// Sleep
+	// CurrentDevice
 	//----------------------------------------------------------------------------------------------
-	pCharacteristicDoneReading = pRemoteService->getCharacteristic(sleepUUID);
-	if (pCharacteristicDoneReading == nullptr)
+	pCharacteristicCurrentDevice = pRemoteService->getCharacteristic(currentDeviceUUID);
+	if (pCharacteristicCurrentDevice == nullptr)
 	{
-		PrintL("Failed to find our characteristic sleep UUID: ");
-		PrintLn(sleepUUID.toString().c_str());
+		PrintL("Failed to find our characteristic CurrentDevice UUID: ");
+		PrintLn(currentDeviceUUID.toString().c_str());
 		pClient->disconnect();
 		return false;
 	}
-	PrintLn(" - Found our characteristic for sleep");
+	PrintLn(" - Found our characteristic for CurrentDevice");
+
+	/* //----------------------------------------------------------------------------------------------
+	// Done reading
+	//----------------------------------------------------------------------------------------------
+	pCharacteristicDoneReading = pRemoteService->getCharacteristic(doneReadingUUID);
+	if (pCharacteristicDoneReading == nullptr)
+	{
+		PrintL("Failed to find our characteristic Done reading UUID: ");
+		PrintLn(doneReadingUUID.toString().c_str());
+		pClient->disconnect();
+		return false;
+	}
+	PrintLn(" - Found our characteristic for Done reading"); */
 
 	return true;
 }
@@ -235,7 +258,7 @@ bool ConnectToServer()
 }
 
 /// @brief writes all predefined characteristics on Plantt-Hub
-void WriteBLEData(Sensor::Readings readings)
+void WriteBLEData(Reading sensorData)
 {
 	doneReading = false; // Lock in case of timeout in connection
 	//----------------------------------------------------------------------------------------------
@@ -243,9 +266,9 @@ void WriteBLEData(Sensor::Readings readings)
 	//----------------------------------------------------------------------------------------------
 	if (pCharacteristicTemperature->canWrite())
 	{
-		pCharacteristicTemperature->writeValue(readings.temperature);
+		pCharacteristicTemperature->writeValue(sensorData.temperature);
 		PrintL("Writen value for temperature value was: ");
-		PrintLn(readings.temperature);
+		PrintLn(sensorData.temperature);
 	}
 
 	//----------------------------------------------------------------------------------------------
@@ -253,9 +276,9 @@ void WriteBLEData(Sensor::Readings readings)
 	//----------------------------------------------------------------------------------------------
 	if (pCharacteristicHumidity->canWrite())
 	{
-		pCharacteristicHumidity->writeValue(readings.humidity);
+		pCharacteristicHumidity->writeValue(sensorData.humidity);
 		PrintL("Writen value for humidity value was: ");
-		PrintLn(readings.humidity);
+		PrintLn(sensorData.humidity);
 	}
 
 	//----------------------------------------------------------------------------------------------
@@ -263,9 +286,9 @@ void WriteBLEData(Sensor::Readings readings)
 	//----------------------------------------------------------------------------------------------
 	if (pCharacteristicMoisture->canWrite())
 	{
-		pCharacteristicMoisture->writeValue(readings.moisture);
+		pCharacteristicMoisture->writeValue(sensorData.moisture);
 		PrintL("Writen value for moisture value was: ");
-		PrintLn(readings.moisture);
+		PrintLn(sensorData.moisture);
 	}
 
 	//----------------------------------------------------------------------------------------------
@@ -273,22 +296,53 @@ void WriteBLEData(Sensor::Readings readings)
 	//----------------------------------------------------------------------------------------------
 	if (pCharacteristicLux->canWrite())
 	{
-		pCharacteristicLux->writeValue(readings.lux); // TODO: consider if we can get a response.
+		pCharacteristicLux->writeValue(sensorData.lux); // TODO: consider if we can get a response.
 		PrintL("Writen value for lux value was: ");
-		PrintLn(readings.lux);
+		PrintLn(sensorData.lux);
 	}
 
-	//----------------------------------------------------------------------------------------------
+	/* //----------------------------------------------------------------------------------------------
 	// Set sensor to sleep.
 	//----------------------------------------------------------------------------------------------
 	if (pCharacteristicDoneReading->canWrite())
 	{
 		PrintLn("Set sensor to sleep.");
 		pCharacteristicDoneReading->writeValue(1, false);
-	}
+	} */
 
 	pClient->disconnect();
 	doneReading = true;
+}
+
+/// @brief Checks each BLE device found.
+class AdvertisedBLECallbacks : public BLEAdvertisedDeviceCallbacks
+{
+	void onResult(BLEAdvertisedDevice advertisedDevice)
+	{
+		// PrintL("BLE Advertised Device found: ");
+		// PrintLn(advertisedDevice.toString().c_str());
+
+		if (advertisedDevice.getServiceUUID().equals(serviceUUID))
+		{
+			PrintLn("Found service with UUID: ");
+			PrintLn(advertisedDevice.toString().c_str());
+			myDevice = new BLEAdvertisedDevice(advertisedDevice);
+			doConnect = true;
+			pBLEScan->stop();
+		}
+	}
+};
+
+/// @brief initiate BLE and   scan and callback.
+void StartBLE()
+{
+	BLEDevice::init("");
+
+	pBLEScan = BLEDevice::getScan();
+	pBLEScan->setAdvertisedDeviceCallbacks(new AdvertisedBLECallbacks());
+	pBLEScan->setActiveScan(true);
+	pBLEScan->setInterval(100);
+	pBLEScan->setWindow(99); // less or equal setInterval value
 }
 
 bool AbleToWrite()
@@ -317,6 +371,39 @@ bool AbleToWrite()
 	return result;
 }
 
+void WriteToHub() {
+	if (doConnect == true)
+	{
+		if (ConnectToServer())
+		{
+			PrintLn("We are now connected to the BLE Server.");
+		}
+		else
+		{
+			PrintLn("We have failed to connect to the server; there is nothin more we will do.");
+		}
+		doConnect = false;
+	}
+
+	if (serverConnected)
+	{
+		int bleAttempts = 0;
+		bool ableToWrite = AbleToWrite();
+		while (ableToWrite == false && bleAttempts <= 10)
+		{
+			delay(500);
+			ableToWrite = AbleToWrite();
+			bleAttempts++;
+		}
+		
+		if (ableToWrite)
+		{
+			WriteBLEData(reading);
+		} 
+		
+	}
+}
+
 void setup()
 {
 	if (PRINT_ENABLED == true)
@@ -331,6 +418,18 @@ void setup()
 #endif
 
 	setModemSleep();
+
+	Sensor *sensor = new Sensor();
+	reading = sensor->getSensorData();
+
+	delete sensor;
+
+	setActiveMode();
+
+	PrintLn("Millis Startup");
+	PrintLn(millis());
+	
+	StartBLE();
 
 	pinMode(buttonPin, INPUT);
 
@@ -354,29 +453,18 @@ void loop()
 			// Do setup here.
 		}
 	}
-	else if (broadcastStarted == false)
-	{
-		broadcastStarted = true;
-		Sensor sensor;
-		Sensor::Readings readings = sensor.getSensorData();
-		broadcastBLE(readings);
-	}
 
-	// Try to sleep on disconnect instead and timeout.
+	 BLEScanResults foundDevices = pBLEScan->start(5, false);
+	PrintL("Devices found: ");
+	PrintLn(foundDevices.getCount());
+	PrintLn("Scan done!");
+	//pBLEScan->clearResults(); // delete results from BLEScan buffer to release memory
+	//delay(2000);			  // TODO: Can we make this value smaler?
 
-	if (*pCharacteristicDoneReading->getData() == 1)
-	{
-		PrintLn();
-		PrintLn("millis: since start");
-		PrintLn(millis());
-		PrintLn("Goes into hibernation mode by request");
-		PrintLn("----------------------");
-		BLEDevice::stopAdvertising();
-		delay(100);
-		hibernation();
-	}
+	WriteToHub();
 
-	if (millis() > 8000 && clientConnected == false) // Before it was 100000
+
+	if (millis() > 8000 && serverConnected == false) // Before it was 100000
 	{												 // 30s = 30000 ms. 1 min = 60000 ms.
 		PrintLn();
 		PrintLn("Goes into hibernation mode by timeout");
