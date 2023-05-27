@@ -28,24 +28,59 @@ Reading readings[5]; //consider adding SensorID here.
 bool broadcastStarted = false;
 bool clientConnected = false;
 
+float stringToFloat(std::string value) 
+{
+	if (value.length() >= 4) {
+		return *(float*)(value.data());
+	}
+	return 0.0;
+} 
+
+
 void readData()
 {
 
 	Reading reading = {};
 	//float asdasd = stof(pCharacteristicTemperature->getValue());
-	
-	PrintLn("temperature1:");
-	const char* temperature = pCharacteristicTemperature->getValue().c_str();
-	PrintLn("temperature2:");
-	Serial.print(temperature);
 
+	float asd = stringToFloat(pCharacteristicTemperature->getValue());
+
+	
+	PrintLn("temperature string to float:");
+	Serial.print(asd);
+
+      
+	
+/* 	PrintLn("temperature1:");
+	
+	std::string temperature = pCharacteristicTemperature->getValue();
+	float tempTest = 0.0f;
+	try
+	{
+		PrintLn("temperature2:");
+		tempTest = strtof(temperature.c_str(), 0);
+	}
+	catch(const std::invalid_argument& e)
+	{
+		PrintLn("invalid_argument:");
+		PrintLn(e.what());
+		
+	}
+	catch (const std::out_of_range& e) 
+	{
+		PrintLn("out_of_range:");
+		PrintLn(e.what());
+	}	
+	
 	PrintLn("temperature3:");
-	reading.temperature = strtof(temperature, nullptr);
+	Serial.print(tempTest); */
+
+	//reading.temperature = strtof(temperature, nullptr);
   	//memcpy(&reading.temperature, temperature.data(), sizeof(float));
 	//reading.temperature = stof(pCharacteristicTemperature->getValue());
 	//memcpy(&reading.temperature, (*pCharacteristicTemperature->getValue()).data(), sizeof(float));;
-	PrintLn("temperature:");
-	PrintLn(reading.temperature);
+	//PrintLn("temperature:");
+	//PrintLn(reading.temperature);
 
 	// reading.humidity = stof(pCharacteristicHumidity->getValue());
 	// //memcpy(&reading.humidity, *pCharacteristicHumidity->getValue().data(), sizeof(float));;

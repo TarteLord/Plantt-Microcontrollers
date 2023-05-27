@@ -266,7 +266,7 @@ void WriteBLEData(Reading sensorData)
 	//----------------------------------------------------------------------------------------------
 	if (pCharacteristicTemperature->canWrite())
 	{
-		pCharacteristicTemperature->writeValue(sensorData.temperature);
+		pCharacteristicTemperature->writeValue(std::to_string(sensorData.temperature));
 		PrintL("Writen value for temperature value was: ");
 		PrintLn(sensorData.temperature);
 	}
