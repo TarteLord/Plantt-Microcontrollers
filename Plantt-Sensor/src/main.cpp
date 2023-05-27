@@ -7,18 +7,30 @@
 #include "preprocessors.h"
 #include "sensor.h"
 
-// static BLEUUID sensors[5] = {BLEUUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b"), BLEUUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b")}
-// The remote service we wish to connect to.
-static BLEUUID serviceUUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
+//----------------------------------------------------------------------------------------------
+// The remote services we wish to connect to.
+//----------------------------------------------------------------------------------------------
+static BLEUUID serviceSensorUUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
+static BLEUUID serviceControlUUID("944c4a5a-4c95-47f2-a295-93e1999bb9d2");
 
-// The Characteristics we are interrested in.
+//----------------------------------------------------------------------------------------------
+// The sensor Characteristics we are interrested in.
+//----------------------------------------------------------------------------------------------
 static BLEUUID temperatureUUID("a3c0cf09-d1d8-421e-a3f8-e3d7dad17ba6");
 static BLEUUID humidityUUID("46cb85fb-eb1e-4a21-b661-0a1d9478d302");
 static BLEUUID moistureUUID("beb5483e-36e1-4688-b7f5-ea07361b26a8");
 static BLEUUID luxUUID("1af7ac38-7aac-40ee-901f-942bd87f47b1");
+
+//----------------------------------------------------------------------------------------------
+// The Control Characteristics we are interrested in.
+//----------------------------------------------------------------------------------------------
 static BLEUUID doneReadingUUID("8d45ef7f-57b5-48f1-bf95-baf39be3442d");
 static BLEUUID currentDeviceUUID("960d74fe-b9c1-485f-ad3c-224a7e57a37f");
 
+
+//----------------------------------------------------------------------------------------------
+// Characteristics
+//----------------------------------------------------------------------------------------------
 static BLERemoteCharacteristic *pCharacteristicTemperature;
 static BLERemoteCharacteristic *pCharacteristicHumidity;
 static BLERemoteCharacteristic *pCharacteristicMoisture;
@@ -134,17 +146,17 @@ void setModemSleep()
 
 
 
-/// @brief Checks if the Characteristics are present on the BLE service
-/// @param pRemoteService The service to check
+/// @brief Checks if the sensor Characteristics are present on the BLE service
+/// @param pRemoteSensorService The service to check
 /// @return state of the check
-bool CheckCharacteristic(BLERemoteService *pRemoteService)
+bool CheckSensorCharacteristic(BLERemoteService *pRemoteSensorService)
 {
 	// Obtain a reference to the characteristic in the service of the remote BLE server.
 
 	//----------------------------------------------------------------------------------------------
 	// temperature
 	//----------------------------------------------------------------------------------------------
-	pCharacteristicTemperature = pRemoteService->getCharacteristic(temperatureUUID);
+	pCharacteristicTemperature = pRemoteSensorService->getCharacteristic(temperatureUUID);
 	if (pCharacteristicTemperature == nullptr)
 	{
 		PrintL("Failed to find our characteristic temperature UUID: ");
@@ -157,7 +169,7 @@ bool CheckCharacteristic(BLERemoteService *pRemoteService)
 	//----------------------------------------------------------------------------------------------
 	// Humidity
 	//----------------------------------------------------------------------------------------------
-	pCharacteristicHumidity = pRemoteService->getCharacteristic(humidityUUID);
+	pCharacteristicHumidity = pRemoteSensorService->getCharacteristic(humidityUUID);
 	if (pCharacteristicHumidity == nullptr)
 	{
 		PrintL("Failed to find our characteristic humidity UUID: ");
@@ -170,7 +182,7 @@ bool CheckCharacteristic(BLERemoteService *pRemoteService)
 	//----------------------------------------------------------------------------------------------
 	// Moisture
 	//----------------------------------------------------------------------------------------------
-	pCharacteristicMoisture = pRemoteService->getCharacteristic(moistureUUID);
+	pCharacteristicMoisture = pRemoteSensorService->getCharacteristic(moistureUUID);
 	if (pCharacteristicMoisture == nullptr)
 	{
 		PrintL("Failed to find our characteristic Moisture UUID: ");
@@ -183,7 +195,7 @@ bool CheckCharacteristic(BLERemoteService *pRemoteService)
 	//----------------------------------------------------------------------------------------------
 	// Lux
 	//----------------------------------------------------------------------------------------------
-	pCharacteristicLux = pRemoteService->getCharacteristic(luxUUID);
+	pCharacteristicLux = pRemoteSensorService->getCharacteristic(luxUUID);
 	if (pCharacteristicLux == nullptr)
 	{
 		PrintL("Failed to find our characteristic Lux UUID: ");
@@ -193,10 +205,34 @@ bool CheckCharacteristic(BLERemoteService *pRemoteService)
 	}
 	PrintLn(" - Found our characteristic for Lux");
 
+	return true;
+}
+
+
+/// @brief Checks if the control Characteristics are present on the BLE service
+/// @param pRemoteSensorService The service to check
+/// @return state of the check
+bool CheckControlCharacteristic(BLERemoteService *pRemoteControlService)
+{
+	// Obtain a reference to the characteristic in the service of the remote BLE server.
+
+	//----------------------------------------------------------------------------------------------
+	// Done reading
+	//----------------------------------------------------------------------------------------------
+	pCharacteristicDoneReading = pRemoteControlService->getCharacteristic(doneReadingUUID);
+	if (pCharacteristicDoneReading == nullptr)
+	{
+		PrintL("Failed to find our characteristic Done reading UUID: ");
+		PrintLn(doneReadingUUID.toString().c_str());
+		pClient->disconnect();
+		return false;
+	}
+	PrintLn(" - Found our characteristic for Done reading");
+
 	//----------------------------------------------------------------------------------------------
 	// CurrentDevice
 	//----------------------------------------------------------------------------------------------
-	pCharacteristicCurrentDevice = pRemoteService->getCharacteristic(currentDeviceUUID);
+	pCharacteristicCurrentDevice = pRemoteControlService->getCharacteristic(currentDeviceUUID);
 	if (pCharacteristicCurrentDevice == nullptr)
 	{
 		PrintL("Failed to find our characteristic CurrentDevice UUID: ");
@@ -206,18 +242,7 @@ bool CheckCharacteristic(BLERemoteService *pRemoteService)
 	}
 	PrintLn(" - Found our characteristic for CurrentDevice");
 
-	/* //----------------------------------------------------------------------------------------------
-	// Done reading
-	//----------------------------------------------------------------------------------------------
-	pCharacteristicDoneReading = pRemoteService->getCharacteristic(doneReadingUUID);
-	if (pCharacteristicDoneReading == nullptr)
-	{
-		PrintL("Failed to find our characteristic Done reading UUID: ");
-		PrintLn(doneReadingUUID.toString().c_str());
-		pClient->disconnect();
-		return false;
-	}
-	PrintLn(" - Found our characteristic for Done reading"); */
+	
 
 	return true;
 }
@@ -238,21 +263,71 @@ bool ConnectToServer()
 	pClient->connect(myDevice);
 	PrintLn(" - Connected to server");
 
-	// Obtain a reference to the service we are after in the remote BLE server.
-	BLERemoteService *pRemoteService = pClient->getService(serviceUUID);
-	if (pRemoteService == nullptr)
+	// Obtain a reference to the sensor service we are after in the remote BLE server.
+	BLERemoteService *pRemoteSensorService = pClient->getService(serviceSensorUUID);
+	if (pRemoteSensorService == nullptr)
 	{
 		PrintL("Failed to find our service UUID: ");
-		PrintLn(serviceUUID.toString().c_str());
+		PrintLn(serviceSensorUUID.toString().c_str());
 		pClient->disconnect();
 		return false;
 	}
-	PrintLn(" - Found our service");
+	PrintLn(" - Found our sensor service");
 
-	if (!CheckCharacteristic(pRemoteService))
+	if (!CheckSensorCharacteristic(pRemoteSensorService))
 	{
 		return false;
 	}
+
+	std::map<std::string, BLERemoteCharacteristic*>* characteristicsMapSensor = pRemoteSensorService->getCharacteristics();
+
+	// Iterate over the map and print each key-value pair
+for (auto it = characteristicsMapSensor->begin(); it != characteristicsMapSensor->end(); ++it) {
+    std::string key = it->first;
+    BLERemoteCharacteristic* characteristic = it->second;
+
+    // Print the key and characteristic details
+    Serial.print("SENSOR");
+    Serial.print("Key: ");
+    Serial.println(key.c_str());
+    Serial.print("Characteristic UUID: ");
+    Serial.println(characteristic->getUUID().toString().c_str());
+    // Add more relevant characteristic information as needed
+}
+
+	// Obtain a reference to the control service we are after in the remote BLE server.
+	BLERemoteService *pRemoteControlService = pClient->getService(serviceControlUUID);
+	if (pRemoteControlService == nullptr)
+	{
+		PrintL("Failed to find our service UUID: ");
+		PrintLn(serviceControlUUID.toString().c_str());
+		pClient->disconnect();
+		return false;
+	}
+	PrintLn(" - Found our control service");
+
+	std::map<std::string, BLERemoteCharacteristic*>* characteristicsMap = pRemoteControlService->getCharacteristics();
+
+// Iterate over the map and print each key-value pair
+for (auto it = characteristicsMap->begin(); it != characteristicsMap->end(); ++it) {
+    std::string key = it->first;
+    BLERemoteCharacteristic* characteristic = it->second;
+
+    // Print the key and characteristic details
+    Serial.print("CONTROL");
+    Serial.print("Key: ");
+    Serial.println(key.c_str());
+    Serial.print("Characteristic UUID: ");
+    Serial.println(characteristic->getUUID().toString().c_str());
+    // Add more relevant characteristic information as needed
+}
+
+
+	if (!CheckControlCharacteristic(pRemoteControlService))
+	{
+		return false;
+	}
+
 
 	return true;
 }
@@ -276,7 +351,7 @@ void WriteBLEData(Reading sensorData)
 	//----------------------------------------------------------------------------------------------
 	if (pCharacteristicHumidity->canWrite())
 	{
-		pCharacteristicHumidity->writeValue(sensorData.humidity);
+		pCharacteristicHumidity->writeValue(std::to_string(sensorData.humidity));
 		PrintL("Writen value for humidity value was: ");
 		PrintLn(sensorData.humidity);
 	}
@@ -296,13 +371,13 @@ void WriteBLEData(Reading sensorData)
 	//----------------------------------------------------------------------------------------------
 	if (pCharacteristicLux->canWrite())
 	{
-		pCharacteristicLux->writeValue(sensorData.lux); // TODO: consider if we can get a response.
+		pCharacteristicLux->writeValue(std::to_string(sensorData.lux)); // TODO: consider if we can get a response.
 		PrintL("Writen value for lux value was: ");
 		PrintLn(sensorData.lux);
 	}
 
 	/* //----------------------------------------------------------------------------------------------
-	// Set sensor to sleep.
+	// Set sensor to DoneReading.
 	//----------------------------------------------------------------------------------------------
 	if (pCharacteristicDoneReading->canWrite())
 	{
@@ -322,9 +397,9 @@ class AdvertisedBLECallbacks : public BLEAdvertisedDeviceCallbacks
 		// PrintL("BLE Advertised Device found: ");
 		// PrintLn(advertisedDevice.toString().c_str());
 
-		if (advertisedDevice.getServiceUUID().equals(serviceUUID))
+		if (advertisedDevice.getServiceUUID().equals(serviceSensorUUID))
 		{
-			PrintLn("Found service with UUID: ");
+			PrintLn("Found sensor service with UUID: ");
 			PrintLn(advertisedDevice.toString().c_str());
 			myDevice = new BLEAdvertisedDevice(advertisedDevice);
 			doConnect = true;
