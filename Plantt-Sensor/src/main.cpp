@@ -76,6 +76,17 @@ void hibernation()
 	esp_deep_sleep_start();
 }
 
+/// @brief Convert a std::__cxx11::string to Int
+int stringToInt(std::__cxx11::string value) 
+{
+	String arduinoString;
+	
+ 	for (int i = 0; i < value.length(); i++) {
+		arduinoString += (char)value[i];
+	}
+	return arduinoString.toInt();
+} 
+
 class BLECallbacks : public BLEClientCallbacks
 {
 	void onConnect(BLEClient *pServer)
@@ -279,22 +290,6 @@ bool ConnectToServer()
 		return false;
 	}
 
-	std::map<std::string, BLERemoteCharacteristic*>* characteristicsMapSensor = pRemoteSensorService->getCharacteristics();
-
-	// Iterate over the map and print each key-value pair
-for (auto it = characteristicsMapSensor->begin(); it != characteristicsMapSensor->end(); ++it) {
-    std::string key = it->first;
-    BLERemoteCharacteristic* characteristic = it->second;
-
-    // Print the key and characteristic details
-    Serial.print("SENSOR");
-    Serial.print("Key: ");
-    Serial.println(key.c_str());
-    Serial.print("Characteristic UUID: ");
-    Serial.println(characteristic->getUUID().toString().c_str());
-    // Add more relevant characteristic information as needed
-}
-
 	// Obtain a reference to the control service we are after in the remote BLE server.
 	BLERemoteService *pRemoteControlService = pClient->getService(serviceControlUUID);
 	if (pRemoteControlService == nullptr)
@@ -305,23 +300,6 @@ for (auto it = characteristicsMapSensor->begin(); it != characteristicsMapSensor
 		return false;
 	}
 	PrintLn(" - Found our control service");
-
-	std::map<std::string, BLERemoteCharacteristic*>* characteristicsMap = pRemoteControlService->getCharacteristics();
-
-// Iterate over the map and print each key-value pair
-for (auto it = characteristicsMap->begin(); it != characteristicsMap->end(); ++it) {
-    std::string key = it->first;
-    BLERemoteCharacteristic* characteristic = it->second;
-
-    // Print the key and characteristic details
-    Serial.print("CONTROL");
-    Serial.print("Key: ");
-    Serial.println(key.c_str());
-    Serial.print("Characteristic UUID: ");
-    Serial.println(characteristic->getUUID().toString().c_str());
-    // Add more relevant characteristic information as needed
-}
-
 
 	if (!CheckControlCharacteristic(pRemoteControlService))
 	{
@@ -376,14 +354,14 @@ void WriteBLEData(Reading sensorData)
 		PrintLn(sensorData.lux);
 	}
 
-	/* //----------------------------------------------------------------------------------------------
+	//----------------------------------------------------------------------------------------------
 	// Set sensor to DoneReading.
 	//----------------------------------------------------------------------------------------------
 	if (pCharacteristicDoneReading->canWrite())
 	{
 		PrintLn("Set sensor to sleep.");
-		pCharacteristicDoneReading->writeValue(1, false);
-	} */
+		pCharacteristicDoneReading->writeValue(3, false);
+	}
 
 	pClient->disconnect();
 	doneReading = true;
@@ -426,19 +404,18 @@ bool AbleToWrite()
 
 	if (pCharacteristicCurrentDevice->canRead())
 	{
-		uint32_t currentDeviceID = pCharacteristicCurrentDevice->readUInt32();
+		int currentDeviceID = stringToInt(pCharacteristicCurrentDevice->readValue());
 
 		if (currentDeviceID == 0)
 		{
 			if (pCharacteristicCurrentDevice->canWrite())
 			{
-				pCharacteristicCurrentDevice->writeValue(sensorID);
+				pCharacteristicCurrentDevice->writeValue(std::to_string(sensorID));
 				result = true;
 			}
 		}
 		else if (currentDeviceID == sensorID)
 		{
-
 			result = true;
 		}
 	}

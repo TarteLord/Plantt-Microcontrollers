@@ -5,7 +5,12 @@
 #include <WiFi.h>
 #include "driver/adc.h"
 #include "preprocessors.h"
-#include "reading.h"
+#include "sensorData.h"
+#include "API.h"
+#include "timeRTC.h"
+
+const char *ssid = "May the WIFI be with you";
+const char *password = "Abekat123";
 
 // UUID: generated from: https://www.uuidgenerator.net/
 
@@ -31,7 +36,7 @@
 //----------------------------------------------------------------------------------------------
 // Control characteristics
 //----------------------------------------------------------------------------------------------
-#define CHARACTERISTICS_DONE_READING_UUID "8d45ef7f-57b5-48f1-bf95-baf39be3442d"
+#define CHARACTERISTICS_DONE_WRITING_UUID "8d45ef7f-57b5-48f1-bf95-baf39be3442d"
 #define CHARACTERISTICS_CURRENTDEVICE_UUID "960d74fe-b9c1-485f-ad3c-224a7e57a37f"
 
 
@@ -42,60 +47,193 @@ BLECharacteristic *pCharacteristicTemperature;
 BLECharacteristic *pCharacteristicHumidity;
 BLECharacteristic *pCharacteristicMoisture;
 BLECharacteristic *pCharacteristicLux;
-BLECharacteristic *pCharacteristicDoneReading;
+BLECharacteristic *pCharacteristicDoneWriting;
 BLECharacteristic *pCharacteristicCurrentDevice;
 
-Reading readings[5]; //consider adding SensorID here.
+API *api;
+
+const int maxAmountReadings = 10;
+SensorData readings[maxAmountReadings];
+int currentAmountReadings = 0;
 
 bool broadcastStarted = false;
 bool clientConnected = false;
 
-/// @brief Convert a std::__cxx11::string to float, using String internally. 
+int64_t millisOnLastDisconnect = 0;
+
+/// @brief Add reading to our array
+/// @param value containing our reading
+void addReading(SensorData value) {
+  if (currentAmountReadings < maxAmountReadings) {
+    readings[currentAmountReadings] = value;
+    currentAmountReadings++;
+  }
+}
+
+/// @brief remove reading from our array
+/// @param value reading to remove
+void removeReading(SensorData value) {
+  for (int i = 0; i < currentAmountReadings; i++) {
+    if (readings[i].sensorID == value.sensorID) {
+      // Shift elements to fill the gap
+      for (int j = i; j < currentAmountReadings - 1; j++) {
+        readings[j] = readings[j + 1];
+      }
+      currentAmountReadings--;
+      break;
+    }
+  }
+}
+
+/// @brief remove reading from our array
+/// @param sensorID ID of reading/SensorData to remove
+void removeReading(int sensorID) {
+  for (int i = 0; i < currentAmountReadings; i++) {
+    if (readings[i].sensorID == sensorID) {
+      // Shift elements to fill the gap
+      for (int j = i; j < currentAmountReadings - 1; j++) {
+        readings[j] = readings[j + 1];
+      }
+      currentAmountReadings--;
+      break;
+    }
+  }
+}
+
+
+/// @brief Resets multiple BLE characteristics to their default values.
+/// 
+/// This function sets the values of the BLE characteristics to their default values.
+/// The default values are as follows:
+/// 
+///     Temperature: 0.0f
+///     Humidity: 0.0f
+///     Moisture: 0
+///     Lux: 0.0f
+///     DoneWriting: 0
+///     CurrentDevice: 0
+/// 
+/// @note This function assumes that the BLE characteristics have already been initialized and are accessible through the respective pointers.
+/// 
+/// @return None
+void resetBLEChacteristics() 
+{
+	std::__cxx11::string zeroFloatStr = "0.0f";
+	std::__cxx11::string zeroIntStr = "0";
+	int zeroInt = 0;
+
+	pCharacteristicTemperature->setValue(zeroFloatStr);
+	pCharacteristicHumidity->setValue(zeroFloatStr);
+	pCharacteristicMoisture->setValue(zeroInt);
+	pCharacteristicLux->setValue(zeroFloatStr);
+	pCharacteristicDoneWriting->setValue(zeroInt);
+	pCharacteristicCurrentDevice->setValue(zeroIntStr);
+}
+
+/// @brief Validates BLE data
+/// @param dataBLE 
+/// @return bool state of check
+bool validateBLEdata(SensorData dataBLE)
+{
+	try
+	{
+		if (dataBLE.sensorID == 0) return false;
+		if (dataBLE.temperature == 0.0f) return false;
+		if (dataBLE.humidity == 0.0f) return false;
+		if (dataBLE.moisture == 0) return false;
+		if (dataBLE.lux == 0.0f) return false;
+	}
+	catch(const std::exception& e)
+	{
+		PrintLn("Error on validating BLE data");
+		PrintLn(e.what());
+		return false;
+	}
+	
+	return true;
+}
+
+/// @brief Convert a std::__cxx11::string to float
 float stringToFloat(std::__cxx11::string value) 
 {
-	//This is sorta silly, but it works everytime. 
+	// After using waay to long on this, it's the most reliable way apparently.
+	// This is very silly, to convert a string to a String and then to a float...
+	// I blame Arduino and whoever wrote the BLE lib.
 	String arduinoString;
 	
  	for (int i = 0; i < value.length(); i++) {
 		arduinoString += (char)value[i];
 	}
 	return arduinoString.toFloat();
+}
+
+/// @brief Convert a std::__cxx11::string to Int
+int stringToInt(std::__cxx11::string value) 
+{
+	String arduinoString;
+	
+ 	for (int i = 0; i < value.length(); i++) {
+		arduinoString += (char)value[i];
+	}
+	return arduinoString.toInt();
 } 
 
-
-void readData()
+/// @brief read Data from BLE Characteristics and add them to readings[]
+bool readData()
 {
-	Reading reading = {};
+	SensorData dataBLE = {};
 
-	reading.temperature = stringToFloat(pCharacteristicTemperature->getValue());
+	dataBLE.temperature = stringToFloat(pCharacteristicTemperature->getValue());
 	PrintLn("temperature:");
-	PrintLn(reading.temperature);
+	PrintLn(dataBLE.temperature);
 
-	reading.humidity = stringToFloat(pCharacteristicHumidity->getValue());
+	dataBLE.humidity = stringToFloat(pCharacteristicHumidity->getValue());
 	PrintLn("humidity:");
-	PrintLn(reading.humidity);
+	PrintLn(dataBLE.humidity);
 
-	reading.moisture = *pCharacteristicMoisture->getData();
+	dataBLE.moisture = *pCharacteristicMoisture->getData();
 	PrintLn("moisture:");
-	PrintLn(reading.moisture);
+	PrintLn(dataBLE.moisture);
 
-	reading.lux = stringToFloat(pCharacteristicLux->getValue());
+	dataBLE.lux = stringToFloat(pCharacteristicLux->getValue());
 	PrintLn("lux:");
-	PrintLn(reading.lux);
+	PrintLn(dataBLE.lux);
 
-	int sleep = *pCharacteristicDoneReading->getData();
-	PrintLn("sleep:");
-	PrintLn(sleep);
-
-	int device = *pCharacteristicCurrentDevice->getData();
+	dataBLE.sensorID = stringToInt(pCharacteristicCurrentDevice->getValue());
 	PrintLn("Device:");
-	PrintLn(device);
+	PrintLn(dataBLE.sensorID);
 
-	// Lav en validering af alle felter ikke er 0.
-	// Hvis de er ikke er det, sæt dem alle til 0. og tilføj værdierne i et array. så vi senere kan sende dem til API
+	bool doneWriting = (bool)*pCharacteristicDoneWriting->getData();
+	PrintLn("doneWriting:");
+	PrintLn(doneWriting);
 
-	// readings
+
+	if (doneWriting == true && validateBLEdata(dataBLE))
+	{
+		addReading(dataBLE);
+
+		//Reset, so we are ready for the next amount of data.
+		resetBLEChacteristics();
+		return true;
+	}
+
+	if (((esp_timer_get_time() / 1000) - millisOnLastDisconnect) > 3000 && doneWriting == false)
+	{
+		if (validateBLEdata(dataBLE))
+		{
+			addReading(dataBLE);
+		}
+		
+		resetBLEChacteristics();
+		return true;
+	}
+
+	// Update last time a client disconnected.
+	millisOnLastDisconnect = esp_timer_get_time() / 1000;
+
+	return false;
 }
+
 
 class BLECallbacks : public BLEServerCallbacks
 {
@@ -122,7 +260,8 @@ void broadcastBLE()
 	BLEService *pServiceSensor = pServer->createService(SERVICE_SENSOR_UUID);
 	BLEService *pServiceControl = pServer->createService(SERVICE_CONTROL_UUID);
 
-	float zeroFloat = 0.0f;
+	std::__cxx11::string zeroFloatStr = "0.0f";
+	std::__cxx11::string zeroIntStr = "0";
 	int zeroInt = 0;
 
 	// Temperature
@@ -134,7 +273,7 @@ void broadcastBLE()
 
 	temperatureDescriptor.setValue("TemperatureCelcius");
 	pCharacteristicTemperature->addDescriptor(&temperatureDescriptor);
-	pCharacteristicTemperature->setValue(zeroFloat);
+	pCharacteristicTemperature->setValue(zeroFloatStr);
 
 	// Humidity
 	pCharacteristicHumidity = pServiceSensor->createCharacteristic(
@@ -145,7 +284,7 @@ void broadcastBLE()
 
 	humidityDescriptor.setValue("HumidityPercentage");
 	pCharacteristicHumidity->addDescriptor(&humidityDescriptor);
-	pCharacteristicHumidity->setValue(zeroFloat);
+	pCharacteristicHumidity->setValue(zeroFloatStr);
 
 	// Moisture
 	pCharacteristicMoisture = pServiceSensor->createCharacteristic(
@@ -167,17 +306,16 @@ void broadcastBLE()
 
 	luxDescriptor.setValue("LuxPercentage");
 	pCharacteristicLux->addDescriptor(&luxDescriptor);
-	pCharacteristicLux->setValue(zeroFloat);
+	pCharacteristicLux->setValue(zeroFloatStr);
 
 	// Done Reading
-	pCharacteristicDoneReading = pServiceControl->createCharacteristic(
-	    CHARACTERISTICS_DONE_READING_UUID,
+	pCharacteristicDoneWriting = pServiceControl->createCharacteristic(
+	    CHARACTERISTICS_DONE_WRITING_UUID,
 	    BLECharacteristic::PROPERTY_WRITE);
 	BLEDescriptor doneReadingDescriptor(BLEUUID((uint16_t)0x2B05));
-	pCharacteristicDoneReading->addDescriptor(&doneReadingDescriptor);
+	pCharacteristicDoneWriting->addDescriptor(&doneReadingDescriptor);
 
-	//uint8_t value8 = 0; //TODO: redo this maybe
-	pCharacteristicDoneReading->setValue(zeroInt);
+	pCharacteristicDoneWriting->setValue(zeroInt);
 
 	// Current Device
 	pCharacteristicCurrentDevice = pServiceControl->createCharacteristic(
@@ -186,9 +324,7 @@ void broadcastBLE()
 	BLEDescriptor currentDeviceDescriptor(BLEUUID((uint16_t)0x2902));
 	pCharacteristicCurrentDevice->addDescriptor(&currentDeviceDescriptor);
 
-	pCharacteristicCurrentDevice->setValue(zeroInt);
-
-	
+	pCharacteristicCurrentDevice->setValue(zeroIntStr);
 
 	pServiceSensor->start();
 	pServiceControl->start();
@@ -201,6 +337,75 @@ void broadcastBLE()
 	BLEDevice::startAdvertising();
 	broadcastStarted = true;
 	PrintLn("Characteristic defined! Now you can read it");
+}
+
+void StopBLE()
+{	
+	BLEDevice::deinit();
+ 	//btStop(); //TODO: do we need this or
+/*	esp_bt_controller_disable();
+	esp_bt_controller_deinit(); */
+	delay(100);
+}
+void StopWIFI()
+{
+	WiFi.disconnect();
+	WiFi.mode(WIFI_OFF);
+	delay(100);
+}
+
+bool StartWIFI()
+{
+	WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
+	WiFi.setHostname("ESP32 Hub");
+	WiFi.mode(WIFI_STA);		// Station mode.
+	WiFi.begin(ssid, password); // Connect to Wifi AP
+	delay(100);
+
+	int wifiAttemps = 0;
+
+	while (WiFi.status() != WL_CONNECTED && wifiAttemps <= 20)
+	{
+		delay(200);
+		wifiAttemps++;
+		PrintL("Not connected to wifi, attempt: ");
+		PrintLn(wifiAttemps);
+	}
+
+	if (wifiAttemps >= 21)
+	{
+		PrintL("Could not connect to wifi.");
+		// TODO: Save data for next time, since we can't connect to wifi.
+		return false;
+	}
+	return true;
+}
+
+void postDataToAPI()
+{
+	StopBLE();
+
+	// Connect to WIFI.
+	StartWIFI();
+
+	if (WiFi.status() == WL_CONNECTED)
+	{	
+
+	/* 	int httpResponseCode = api->PostReadingAPI(readings);
+
+		if ((httpResponseCode >= 200 && httpResponseCode <= 204) || httpResponseCode == 307)
+		{
+			PrintLn("PostReadingsAPI succes");
+		}
+		else
+		{
+			PrintLn("Something went wrong, try again in 200");
+			delay(200);
+			api->PostReadingAPI(readings, tempSensorID);
+
+			//TODO: if this fails, lets save the information and try again, with the next request.
+		} */
+	}
 }
 
 void setup()
@@ -222,6 +427,12 @@ void loop()
 	{
 		BLEDevice::startAdvertising();
 	}
+
+	if (clientConnected == false && currentAmountReadings > 1)
+	{
+		/* code */
+	}
+	
 	
 
 	PrintLn("In the main loop");
