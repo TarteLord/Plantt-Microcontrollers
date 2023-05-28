@@ -6,6 +6,7 @@
 #include "driver/adc.h"
 #include "preprocessors.h"
 #include "sensor.h"
+#include "tools.h"
 
 //----------------------------------------------------------------------------------------------
 // The remote services we wish to connect to.
@@ -27,7 +28,6 @@ static BLEUUID luxUUID("1af7ac38-7aac-40ee-901f-942bd87f47b1");
 static BLEUUID doneReadingUUID("8d45ef7f-57b5-48f1-bf95-baf39be3442d");
 static BLEUUID currentDeviceUUID("960d74fe-b9c1-485f-ad3c-224a7e57a37f");
 
-
 //----------------------------------------------------------------------------------------------
 // Characteristics
 //----------------------------------------------------------------------------------------------
@@ -46,8 +46,8 @@ static BLEAdvertisedDevice *myDevice;
 const int MAXREADINGS = 5;
 
 const int buttonPin = 32;
+int buttonState = 0;
 
-static boolean doneReading = true;
 bool broadcastStarted = false;
 bool serverConnected = false;
 bool doConnect = false;
@@ -56,10 +56,17 @@ int sensorID = 5;
 Reading reading = {};
 
 #define uS_TO_S_FACTOR 1000000
-// #define TIME_TO_SLEEP 1200
-#define TIME_TO_SLEEP 8
 
-void setActiveMode()
+#if PRINT_ENABLED == true
+#define TIME_TO_SLEEP 8
+#else
+#define TIME_TO_SLEEP 3600
+#endif
+
+/// @brief Sets the active mode of the device.
+/// @note This function sets the CPU frequency to 240MHz, powers on the ADC, introduces a delay of 100 milliseconds,
+///       and starts the Bluetooth operation.
+void SetActiveMode()
 {
 	setCpuFrequencyMhz(240);
 	adc_power_on();
@@ -67,7 +74,22 @@ void setActiveMode()
 	btStart();
 }
 
-void hibernation()
+/// @brief Sets the modem to sleep mode.
+/// @note This function stops Bluetooth operation, disconnects from the network, and turns off WiFi mode.
+///       It also sets the CPU frequency to 80MHz.
+void setModemSleep()
+{
+	btStop();
+	WiFi.disconnect(true); // Disconnect from the network
+	WiFi.mode(WIFI_OFF);
+	setCpuFrequencyMhz(80);
+	// Use this if 40Mhz is not supported
+	// setCpuFrequencyMhz(40); //TODO: Try with this later, when the communication part is done.
+}
+
+/// @brief Puts the device into hibernation mode.
+/// @note This function configures power domains and puts the device into deep sleep mode.
+void Hibernation()
 {
 	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
 	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF);
@@ -76,43 +98,27 @@ void hibernation()
 	esp_deep_sleep_start();
 }
 
-/// @brief Convert a std::__cxx11::string to Int
-int stringToInt(std::__cxx11::string value) 
-{
-	String arduinoString;
-	
- 	for (int i = 0; i < value.length(); i++) {
-		arduinoString += (char)value[i];
-	}
-	return arduinoString.toInt();
-} 
-
+/// @brief Callbacks for BLE client events.
 class BLECallbacks : public BLEClientCallbacks
 {
+	/// @brief Callback function when a client connects.
+	/// @param pServer Pointer to the BLEClient object representing the server.
 	void onConnect(BLEClient *pServer)
 	{
-		PrintLn("A client has connected");
+		PrintLn("The client has connected");
 		serverConnected = true;
 	}
 
+	/// @brief Callback function when a client disconnects.
+	/// @param pServer Pointer to the BLEClient object representing the server.
 	void onDisconnect(BLEClient *pServer)
 	{
-		PrintLn("A client has disconnected");
-		
+		PrintLn("The client has disconnected");
+
 		PrintLn("Millis onDisconnect");
 		PrintLn(millis());
 		serverConnected = false;
-		BLEDevice::stopAdvertising();
-		delay(100);
-		hibernation();
-		if (doneReading == false) //DO we need this?
-		{
-			PrintLn("Was disruppet unexpectexly");
-			doneReading = true;
-
-			// reboot since there apparently is not other way.
-			ESP.restart();
-		}
+		Hibernation();
 	}
 };
 
@@ -144,22 +150,10 @@ void printWakeupReason()
 	}
 }
 
-void setModemSleep()
-{
-	btStop();
-	// adc_power_off(); TODO: Delete
-	WiFi.disconnect(true); // Disconnect from the network
-	WiFi.mode(WIFI_OFF);
-	setCpuFrequencyMhz(80);
-	// Use this if 40Mhz is not supported
-	// setCpuFrequencyMhz(40); //TODO: Try with this later, when the communication part is done.
-}
-
-
-
-/// @brief Checks if the sensor Characteristics are present on the BLE service
-/// @param pRemoteSensorService The service to check
-/// @return state of the check
+/// @brief Checks if the sensor characteristics are available in the sensor BLE service.
+/// @param pRemoteSensorService A pointer to the sensor BLE service.
+/// @note This function obtains references to the temperature, humidity, moisture, and lux characteristics in the sensor BLE service.
+/// @return True if all the characteristics are found, False otherwise.
 bool CheckSensorCharacteristic(BLERemoteService *pRemoteSensorService)
 {
 	// Obtain a reference to the characteristic in the service of the remote BLE server.
@@ -219,10 +213,10 @@ bool CheckSensorCharacteristic(BLERemoteService *pRemoteSensorService)
 	return true;
 }
 
-
-/// @brief Checks if the control Characteristics are present on the BLE service
-/// @param pRemoteSensorService The service to check
-/// @return state of the check
+/// @brief Checks if the control characteristics are available in the control BLE service.
+/// @param pRemoteControlService A pointer to the control BLE service.
+/// @note This function obtains references to the "Done reading" and "CurrentDevice" characteristics in the control BLE service.
+/// @return True if both characteristics are found, False otherwise.
 bool CheckControlCharacteristic(BLERemoteService *pRemoteControlService)
 {
 	// Obtain a reference to the characteristic in the service of the remote BLE server.
@@ -253,13 +247,13 @@ bool CheckControlCharacteristic(BLERemoteService *pRemoteControlService)
 	}
 	PrintLn(" - Found our characteristic for CurrentDevice");
 
-	
-
 	return true;
 }
 
-/// @brief Connect to BLE device and check Service and Characteristic are defined.
-/// @return boolean on the state
+
+/// @brief Forms a connection to a remote BLE server and verifies the availability of sensor and control characteristics.
+/// @note This function connects to the remote BLE server, obtains references to the sensor and control services, and checks for the availability of corresponding characteristics.
+/// @return True if the connection is successful and all necessary characteristics are found, False otherwise.
 bool ConnectToServer()
 {
 	PrintL("Forming a connection to ");
@@ -306,14 +300,14 @@ bool ConnectToServer()
 		return false;
 	}
 
-
 	return true;
 }
 
-/// @brief writes all predefined characteristics on Plantt-Hub
+/// @brief Writes sensor data to the corresponding characteristics of the remote BLE server.
+/// @param sensorData The sensor data to be written.
+/// @note This function writes the temperature, humidity, moisture, and lux values to their respective characteristics in the remote BLE server. It also sets the "DoneReading" characteristic to indicate that the sensor readings transfer is complete.
 void WriteBLEData(Reading sensorData)
 {
-	doneReading = false; // Lock in case of timeout in connection
 	//----------------------------------------------------------------------------------------------
 	// Write the value of temperature from the characteristic.
 	//----------------------------------------------------------------------------------------------
@@ -349,7 +343,7 @@ void WriteBLEData(Reading sensorData)
 	//----------------------------------------------------------------------------------------------
 	if (pCharacteristicLux->canWrite())
 	{
-		pCharacteristicLux->writeValue(std::to_string(sensorData.lux)); // TODO: consider if we can get a response.
+		pCharacteristicLux->writeValue(std::to_string(sensorData.lux));
 		PrintL("Writen value for lux value was: ");
 		PrintLn(sensorData.lux);
 	}
@@ -360,21 +354,22 @@ void WriteBLEData(Reading sensorData)
 	if (pCharacteristicDoneReading->canWrite())
 	{
 		PrintLn("Set hub to done reading.");
-		pCharacteristicDoneReading->writeValue(3, false);
+		pCharacteristicDoneReading->writeValue(1, false);
 	}
 
 	pClient->disconnect();
-	doneReading = true;
 }
 
-/// @brief Checks each BLE device found.
+/// @brief Callbacks for advertised BLE devices.
 class AdvertisedBLECallbacks : public BLEAdvertisedDeviceCallbacks
 {
+	/// @brief Called when an advertised BLE device is found.
+	/// @param advertisedDevice The advertised BLE device.
+	/// @note Checks if the device's service UUID matches the desired sensor service UUID.
+	///       If a match is found, sets the myDevice variable, sets the doConnect flag to true,
+	///       and stops the BLE scanning process.
 	void onResult(BLEAdvertisedDevice advertisedDevice)
 	{
-		// PrintL("BLE Advertised Device found: ");
-		// PrintLn(advertisedDevice.toString().c_str());
-
 		if (advertisedDevice.getServiceUUID().equals(serviceSensorUUID))
 		{
 			PrintLn("Found sensor service with UUID: ");
@@ -386,7 +381,9 @@ class AdvertisedBLECallbacks : public BLEAdvertisedDeviceCallbacks
 	}
 };
 
-/// @brief initiate BLE and   scan and callback.
+/// @brief Initializes the BLE device and starts scanning for advertised devices.
+/// @note This function initializes the BLE device and configures the scanning parameters
+///       before starting the scan for advertised BLE devices.
 void StartBLE()
 {
 	BLEDevice::init("");
@@ -398,13 +395,19 @@ void StartBLE()
 	pBLEScan->setWindow(99); // less or equal setInterval value
 }
 
+/// @brief Checks if the current device is able to write data.
+/// @note This function verifies if the current device can read the current device ID.
+///       If the current device ID is 0, it checks if the characteristic can be written
+///       with the sensor ID. If the current device ID matches the sensor ID, it indicates
+///       that the device is able to write data.
+/// @return Returns true if the current device is able to write data, false otherwise.
 bool AbleToWrite()
 {
 	bool result = false;
 
 	if (pCharacteristicCurrentDevice->canRead())
 	{
-		int currentDeviceID = stringToInt(pCharacteristicCurrentDevice->readValue());
+		int currentDeviceID = StringToInt(pCharacteristicCurrentDevice->readValue());
 
 		if (currentDeviceID == 0)
 		{
@@ -423,7 +426,9 @@ bool AbleToWrite()
 	return result;
 }
 
-void WriteToHub() {
+/// @brief Writes sensor data to the hub if a valid connection is established.
+void WriteToHub()
+{
 	if (doConnect == true)
 	{
 		if (ConnectToServer())
@@ -447,24 +452,20 @@ void WriteToHub() {
 			ableToWrite = AbleToWrite();
 			bleAttempts++;
 		}
-		
+
 		if (ableToWrite)
 		{
 			WriteBLEData(reading);
-		} 
-		
+		}
 	}
 }
 
+/// @brief Initializes the system, sets up the sensor, activates the mode, starts BLE, enables timer wakeup, and prepares for operation.
 void setup()
 {
-	if (PRINT_ENABLED == true)
-	{
-		Serial.begin(115200);
-		delay(1000);
-	}
-
 #if PRINT_ENABLED == true
+	Serial.begin(115200);
+	delay(1000);
 	// Displays the reason for the wake up
 	printWakeupReason();
 #endif
@@ -476,11 +477,11 @@ void setup()
 
 	delete sensor;
 
-	setActiveMode();
+	SetActiveMode();
 
 	PrintLn("Millis Startup");
 	PrintLn(millis());
-	
+
 	StartBLE();
 
 	pinMode(buttonPin, INPUT);
@@ -492,7 +493,9 @@ void setup()
 	PrintLn("Starting BLE work!");
 }
 
-int buttonState = 0;
+/// @brief Executes the main loop of the program, including button state check, BLE scanning, data writing to the hub, and hibernation.
+///        The function checks the state of a button, performs BLE scanning to discover devices, prints the count of found devices,
+///        writes data to the hub if the server is connected and able to write, and triggers hibernation based on timeout conditions.
 void loop()
 {
 	buttonState = digitalRead(GPIO_NUM_32);
@@ -506,24 +509,20 @@ void loop()
 		}
 	}
 
-	 BLEScanResults foundDevices = pBLEScan->start(5, false);
+	BLEScanResults foundDevices = pBLEScan->start(5, false);
 	PrintL("Devices found: ");
 	PrintLn(foundDevices.getCount());
 	PrintLn("Scan done!");
-	//pBLEScan->clearResults(); // delete results from BLEScan buffer to release memory
-	//delay(2000);			  // TODO: Can we make this value smaler?
 
 	WriteToHub();
-
 
 	if (millis() > 8000 && serverConnected == false) // Before it was 100000
 	{												 // 30s = 30000 ms. 1 min = 60000 ms.
 		PrintLn();
 		PrintLn("Goes into hibernation mode by timeout");
 		PrintLn("----------------------");
-		BLEDevice::stopAdvertising();
 		delay(100);
-		hibernation();
+		Hibernation();
 	}
 
 	if (millis() > 12000)
@@ -531,9 +530,8 @@ void loop()
 		PrintLn();
 		PrintLn("Goes into hibernation mode by timeout");
 		PrintLn("----------------------");
-		BLEDevice::stopAdvertising();
 		delay(100);
-		hibernation();
+		Hibernation();
 	}
 
 	delay(150);
