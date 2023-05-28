@@ -83,8 +83,7 @@ void setModemSleep()
 	WiFi.disconnect(true); // Disconnect from the network
 	WiFi.mode(WIFI_OFF);
 	setCpuFrequencyMhz(80);
-	// Use this if 40Mhz is not supported
-	// setCpuFrequencyMhz(40); //TODO: Try with this later, when the communication part is done.
+	
 }
 
 /// @brief Puts the device into hibernation mode.

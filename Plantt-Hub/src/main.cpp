@@ -119,16 +119,26 @@ void RemoveReading(int sensorID)
 /// @brief clear the array of all values.
 void ClearReadings()
 {
-	for (int i = 0; i < currentAmountReadings - 1; i++)
+	if (currentAmountReadings == 1)
 	{
-		readings[i].moisture = 0;
-		readings[i].lux = 0.0f;
-		readings[i].humidity = 0.0f;
-		readings[i].temperature = 0.0f;
+		readings[0].moisture = 0;
+		readings[0].lux = 0.0f;
+		readings[0].humidity = 0.0f;
+		readings[0].temperature = 0.0f;
 		currentAmountReadings--;
 	}
+	else
+	{
+		for (int i = 0; i < currentAmountReadings - 1; i++)
+		{
+			readings[i].moisture = 0;
+			readings[i].lux = 0.0f;
+			readings[i].humidity = 0.0f;
+			readings[i].temperature = 0.0f;
+			currentAmountReadings--;
+		}
+	}
 }
-
 
 /// @brief Resets the values of BLE characteristics to zero or empty strings.
 /// @note This function assumes that the BLE characteristics have already been initialized and are accessible through the respective pointers.
@@ -171,7 +181,6 @@ bool ValidateBLEdata(SensorData dataBLE)
 
 	return true;
 }
-
 
 /// @brief Reads and processes the BLE sensor data and add them to readings[]
 /// @return True if the data is successfully read and processed, false otherwise.
@@ -389,7 +398,7 @@ bool StartWIFI()
 
 	WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
 	WiFi.setHostname("Plantt Hub");
-	WiFi.mode(WIFI_STA);		// Station mode.
+	WiFi.mode(WIFI_STA);					  // Station mode.
 	WiFi.begin(config.ssid, config.password); // Connect to Wifi AP
 	delay(100);
 
@@ -412,7 +421,7 @@ bool StartWIFI()
 }
 
 /// @brief Posts the collected sensor data to the API.
-/// 
+///
 /// This function stops the BLE communication and broadcasts, connects to the configured WiFi network,
 /// and sends the collected sensor data to the API using the API instance. It handles the API response,
 /// checks for success or error conditions, and performs appropriate actions based on the response. If
@@ -498,16 +507,16 @@ void setup()
 	// Initiate the Config singleton
 	Config &config = Config::GetInstance();
 
-	//Only for debug, purposes
+	// Only for debug, purposes
 	if (PRINT_ENABLED == true)
 	{
-		//If config, is empty, lets just write some data.
+		// If config, is empty, lets just write some data.
 		if (!(config.ssid[0] == '\0' &&
-			config.password[0] == '\0' &&
-			config.identity[0] == '\0' &&
-			config.secret[0] == '\0'))
+			  config.password[0] == '\0' &&
+			  config.identity[0] == '\0' &&
+			  config.secret[0] == '\0'))
 		{
-			//This should be handled different, when there is a real pairing way implemented.
+			// This should be handled different, when there is a real pairing way implemented.
 			if (config.WriteConfig("May the WIFI be with you", "Abekat123", "O9HpT_OYWm2FbvVko7y32yy2", "uIrHT1U540GaaTM4sCefJjgS-kSn0neL3fK8k-QDyLijq1HCtCPAp7xVO7DUP-EW"))
 			{
 				PrintLn("Success writing to SPIFFS");
@@ -547,7 +556,7 @@ void setup()
 /// This function is the main loop of the Plantt Hub program. It starts by checking if the BLE advertising has
 /// been started. If not, it calls the BLEDevice::startAdvertising() function to start advertising. Then, it checks
 /// if a client is not connected and there is at least one reading available. If both conditions are met, it calls the
-/// PostDataToAPI() function to post the data to the API. 
+/// PostDataToAPI() function to post the data to the API.
 void loop()
 {
 	if (!broadcastStarted)
@@ -557,12 +566,11 @@ void loop()
 		broadcastStarted = true;
 	}
 
-	if (clientConnected == false && currentAmountReadings >= 1) // TODO: must pass a certain interval?
+	if (clientConnected == false && currentAmountReadings >= 1)
 	{
 		PrintLn("We got data to send");
 		PostDataToAPI();
 	}
-
 
 	PrintLn("In the main loop");
 
