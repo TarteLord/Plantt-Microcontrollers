@@ -8,13 +8,10 @@
 #include "sensorData.h"
 #include "API.h"
 #include "timeRTC.h"
+#include "config.h"
 
-// Should be fetched from spiffs! TODO:!!!
-const char *ssid = "May the WIFI be with you";
-const char *password = "Abekat123";
-
-const char *identity = "O9HpT_OYWm2FbvVko7y32yy2";
-const char *secret = "uIrHT1U540GaaTM4sCefJjgS-kSn0neL3fK8k-QDyLijq1HCtCPAp7xVO7DUP-EW";
+#include <SPIFFS.h>
+#include <FS.h>
 
 // UUID: generated from: https://www.uuidgenerator.net/
 
@@ -71,8 +68,6 @@ int64_t millisOnLastDisconnect = 0;
 // Code
 //----------------------------------------------------------------------------------------------
 
-
-
 /// @brief Add reading to our array
 /// @param value containing our reading
 void addReading(SensorData value)
@@ -125,11 +120,12 @@ void removeReading(int sensorID)
 /// @brief clear the array of all values.
 void clearReadings()
 {
-	for (int i = 0; i < currentAmountReadings - 1; i++) {
-    	readings[i].moisture = 0;
-    	readings[i].lux = 0.0f;
-    	readings[i].humidity = 0.0f;
-    	readings[i].temperature = 0.0f;
+	for (int i = 0; i < currentAmountReadings - 1; i++)
+	{
+		readings[i].moisture = 0;
+		readings[i].lux = 0.0f;
+		readings[i].humidity = 0.0f;
+		readings[i].temperature = 0.0f;
 		currentAmountReadings--;
 	}
 }
@@ -171,8 +167,6 @@ bool validateBLEdata(SensorData dataBLE)
 	try
 	{
 		if (dataBLE.sensorID == 0)
-			return false;
-		if (dataBLE.temperature == 0.0f)
 			return false;
 		if (dataBLE.humidity == 0.0f)
 			return false;
@@ -384,9 +378,6 @@ void broadcastBLE() // TODO: rename to startBLE?
 void StopBLE()
 {
 	BLEDevice::deinit();
-	// btStop(); //TODO: do we need this or
-	/*	esp_bt_controller_disable();
-		esp_bt_controller_deinit(); */
 	delay(100);
 }
 void StopWIFI()
@@ -398,10 +389,12 @@ void StopWIFI()
 
 bool StartWIFI()
 {
+	Config &config = Config::GetInstance();
+
 	WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
-	WiFi.setHostname("ESP32 Hub");
+	WiFi.setHostname("Plantt Hub");
 	WiFi.mode(WIFI_STA);		// Station mode.
-	WiFi.begin(ssid, password); // Connect to Wifi AP
+	WiFi.begin(config.ssid, config.password); // Connect to Wifi AP
 	delay(100);
 
 	int wifiAttemps = 0;
@@ -438,29 +431,27 @@ void postDataToAPI()
 		{
 			httpResponseCode = api->PostReadingAPI(readings[0]);
 		}
-		else 
+		else
 		{
 			httpResponseCode = api->PostReadingsAPI(readings, currentAmountReadings);
 		}
-
 
 		if ((httpResponseCode >= 200 && httpResponseCode <= 204) || httpResponseCode == 307)
 		{
 			PrintLn("PostReadingsAPI succes");
 			clearReadings();
-			
 		}
 		else
 		{
 			PrintLn(httpResponseCode);
 			PrintLn("Something went wrong, try again later");
 
-			if (httpResponseCode == 403 || httpResponseCode >= 405 && && httpResponseCode <= 500)
+			if (httpResponseCode == 403 || httpResponseCode >= 405 && httpResponseCode <= 500)
 			{
 				PrintLn("Something is wrong API, we can't do anything about it. discarding data");
 				clearReadings();
 			}
-			
+
 			delay(2000);
 		}
 	}
@@ -475,6 +466,26 @@ void setup()
 	{
 		Serial.begin(115200);
 		delay(1000);
+	}
+
+	// Initiate the RTC singleton
+	Config &config = Config::GetInstance();
+
+	//Only for debug, purposes
+	if (PRINT_ENABLED == true)
+	{
+		//If config, is empty, lets just write some data.
+		if (!(config.ssid[0] == '\0' &&
+			config.password[0] == '\0' &&
+			config.identity[0] == '\0' &&
+			config.secret[0] == '\0'))
+		{
+			//This should be handled different, when there is a real pairing way implemented.
+			if (config.WriteConfig("May the WIFI be with you", "Abekat123", "O9HpT_OYWm2FbvVko7y32yy2", "uIrHT1U540GaaTM4sCefJjgS-kSn0neL3fK8k-QDyLijq1HCtCPAp7xVO7DUP-EW"))
+			{
+				PrintLn("Success writing to SPIFFS");
+			}
+		}
 	}
 
 	delay(2000);
@@ -493,7 +504,7 @@ void setup()
 		// Initiate the RTC singleton
 		TimeRTC *timeRTC = TimeRTC::GetInstance();
 
-		api = new API(identity, secret); // TODO: maybe make it into singleton
+		api = new API(config.identity, config.secret);
 	}
 
 	StopWIFI();
@@ -513,7 +524,7 @@ void loop()
 		broadcastStarted = true;
 	}
 
-	if (clientConnected == false && currentAmountReadings >= 3) //change to 1
+	if (clientConnected == false && currentAmountReadings >= 3) // change to 1
 	{
 		PrintLn("We got data to send");
 		postDataToAPI();
