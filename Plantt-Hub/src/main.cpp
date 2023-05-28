@@ -62,6 +62,7 @@ bool broadcastStarted = false;
 bool clientConnected = false;
 
 int64_t millisOnLastDisconnect = 0;
+int64_t millisOnApiPost = 0;
 
 //----------------------------------------------------------------------------------------------
 // Code
@@ -121,22 +122,26 @@ void ClearReadings()
 {
 	if (currentAmountReadings == 1)
 	{
+		readings[0].sensorID = 0;
+		readings[0].epochTS = 0;
 		readings[0].moisture = 0;
 		readings[0].lux = 0.0f;
 		readings[0].humidity = 0.0f;
 		readings[0].temperature = 0.0f;
-		currentAmountReadings--;
+		currentAmountReadings = 0;
 	}
 	else
 	{
 		for (int i = 0; i < currentAmountReadings - 1; i++)
 		{
+			readings[i].sensorID = 0;
+			readings[i].epochTS = 0;
 			readings[i].moisture = 0;
 			readings[i].lux = 0.0f;
 			readings[i].humidity = 0.0f;
 			readings[i].temperature = 0.0f;
-			currentAmountReadings--;
 		}
+		currentAmountReadings = 0;
 	}
 }
 
@@ -510,8 +515,17 @@ void setup()
 	// Only for debug, purposes
 	if (PRINT_ENABLED == true)
 	{
+		
+		PrintLn("config.ssid");
+		PrintLn(config.ssid);
+		PrintLn("config.password");
+		PrintLn(config.password);
+		PrintLn("config.identity");
+		PrintLn(config.identity);
+		PrintLn("config.secret");
+		PrintLn(config.secret);
 		// If config, is empty, lets just write some data.
-		if (!(config.ssid[0] == '\0' &&
+		if ((config.ssid[0] == '\0' &&
 			  config.password[0] == '\0' &&
 			  config.identity[0] == '\0' &&
 			  config.secret[0] == '\0'))
@@ -552,11 +566,6 @@ void setup()
 }
 
 /// @brief Main loop function that handles the Plantt Hub's main operations.
-///
-/// This function is the main loop of the Plantt Hub program. It starts by checking if the BLE advertising has
-/// been started. If not, it calls the BLEDevice::startAdvertising() function to start advertising. Then, it checks
-/// if a client is not connected and there is at least one reading available. If both conditions are met, it calls the
-/// PostDataToAPI() function to post the data to the API.
 void loop()
 {
 	if (!broadcastStarted)
@@ -566,8 +575,12 @@ void loop()
 		broadcastStarted = true;
 	}
 
-	if (clientConnected == false && currentAmountReadings >= 1)
+	if (clientConnected == false && currentAmountReadings >= 1 && ((esp_timer_get_time() / 1000) - millisOnApiPost) > 30000 
+		|| clientConnected == false && currentAmountReadings >= 5) 
 	{
+		TimeRTC *timeRTC = TimeRTC::GetInstance();
+		millisOnApiPost = timeRTC->GetEpochTime();
+		
 		PrintLn("We got data to send");
 		PostDataToAPI();
 	}
