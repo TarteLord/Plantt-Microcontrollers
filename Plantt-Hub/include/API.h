@@ -4,9 +4,10 @@
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include "preprocessors.h"
-#include "reading.h"
 #include "timeRTC.h"
 #include "wifiFix.h"
+#include "sensorData.h"
+//#include "reading.h"
 
 class API
 {
@@ -21,12 +22,15 @@ private:
 	String GetAccessToken();
 	bool ValidateLoginJson(String jsonString);
 	bool AccessTokenValid();
+	char *getJsonFormattedSensorData(SensorData reading);
+	void freeString(char* strArr);
 
 public:
 	API(const char *pIdentity, const char *pSecret);
 	~API();
 
-	int PostReadingAPI(Reading readings, int sensorID);
+	int PostReadingAPI(SensorData reading);
+	int PostReadingsAPI(SensorData *readings, int readingsAmount);
 	bool SetAccessToken();
 };
 

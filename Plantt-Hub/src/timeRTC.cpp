@@ -6,7 +6,7 @@ TimeRTC::TimeRTC() : _ntpClient(_ntpUDP, "dk.pool.ntp.org")
 {
 	PrintLn("Init RTC");
 
-	_ntpClient.begin();
+	_ntpClient.begin(); //TODO: Is there a problem here, when we dont know if wifi is connected?
 
 	UpdateRTC();
 }

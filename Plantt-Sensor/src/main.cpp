@@ -52,7 +52,7 @@ bool broadcastStarted = false;
 bool serverConnected = false;
 bool doConnect = false;
 
-uint32_t sensorID = 1;
+int sensorID = 5;
 Reading reading = {};
 
 #define uS_TO_S_FACTOR 1000000
@@ -359,7 +359,7 @@ void WriteBLEData(Reading sensorData)
 	//----------------------------------------------------------------------------------------------
 	if (pCharacteristicDoneReading->canWrite())
 	{
-		PrintLn("Set sensor to sleep.");
+		PrintLn("Set hub to done reading.");
 		pCharacteristicDoneReading->writeValue(3, false);
 	}
 
