@@ -6,44 +6,120 @@
 #include "driver/adc.h"
 #include "preprocessors.h"
 #include "sensor.h"
+#include "tools.h"
 
-// TODO: make more services for the different services
-#define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define CHARACTERISTICS_TEMPERATURE_UUID 	"a3c0cf09-d1d8-421e-a3f8-e3d7dad17ba6"
-#define CHARACTERISTICS_HUMIDITY_UUID 		"46cb85fb-eb1e-4a21-b661-0a1d9478d302"
-#define CHARACTERISTICS_MOISTURE_UUID 		"beb5483e-36e1-4688-b7f5-ea07361b26a8"
-#define CHARACTERISTICS_LUX_UUID 			"1af7ac38-7aac-40ee-901f-942bd87f47b1"
-#define CHARACTERISTICS_SLEEP_UUID 			"8d45ef7f-57b5-48f1-bf95-baf39be3442d"
+//----------------------------------------------------------------------------------------------
+// The remote services we wish to connect to.
+//----------------------------------------------------------------------------------------------
+static BLEUUID serviceSensorUUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
+static BLEUUID serviceControlUUID("944c4a5a-4c95-47f2-a295-93e1999bb9d2");
 
-BLECharacteristic *pCharacteristicTemperature;
-BLECharacteristic *pCharacteristicHumidity;
-BLECharacteristic *pCharacteristicMoisture;
-BLECharacteristic *pCharacteristicLux;
-BLECharacteristic *pCharacteristicSleep;
+//----------------------------------------------------------------------------------------------
+// The sensor Characteristics we are interrested in.
+//----------------------------------------------------------------------------------------------
+static BLEUUID temperatureUUID("a3c0cf09-d1d8-421e-a3f8-e3d7dad17ba6");
+static BLEUUID humidityUUID("46cb85fb-eb1e-4a21-b661-0a1d9478d302");
+static BLEUUID moistureUUID("beb5483e-36e1-4688-b7f5-ea07361b26a8");
+static BLEUUID luxUUID("1af7ac38-7aac-40ee-901f-942bd87f47b1");
+
+//----------------------------------------------------------------------------------------------
+// The Control Characteristics we are interrested in.
+//----------------------------------------------------------------------------------------------
+static BLEUUID doneReadingUUID("8d45ef7f-57b5-48f1-bf95-baf39be3442d");
+static BLEUUID currentDeviceUUID("960d74fe-b9c1-485f-ad3c-224a7e57a37f");
+
+//----------------------------------------------------------------------------------------------
+// Characteristics
+//----------------------------------------------------------------------------------------------
+static BLERemoteCharacteristic *pCharacteristicTemperature;
+static BLERemoteCharacteristic *pCharacteristicHumidity;
+static BLERemoteCharacteristic *pCharacteristicMoisture;
+static BLERemoteCharacteristic *pCharacteristicLux;
+static BLERemoteCharacteristic *pCharacteristicDoneReading;
+static BLERemoteCharacteristic *pCharacteristicCurrentDevice;
+
+BLEScan *pBLEScan;
+BLEClient *pClient;
+
+static BLEAdvertisedDevice *myDevice;
 
 const int MAXREADINGS = 5;
 
 const int buttonPin = 32;
+int buttonState = 0;
 
 bool broadcastStarted = false;
-bool clientConnected = false;
+bool serverConnected = false;
+bool doConnect = false;
+
+int sensorID = 5;
+Reading reading = {};
 
 #define uS_TO_S_FACTOR 1000000
-// #define TIME_TO_SLEEP 1200
+
+#if PRINT_ENABLED == true
 #define TIME_TO_SLEEP 8
+#else
+#define TIME_TO_SLEEP 3600
+#endif
 
-class BLECallbacks : public BLEServerCallbacks {
-  void onConnect(BLEServer* pServer) {
-    PrintLn("A client has connected");
-	clientConnected = true;
-  }
+/// @brief Sets the active mode of the device.
+/// @note This function sets the CPU frequency to 240MHz, powers on the ADC, introduces a delay of 100 milliseconds,
+///       and starts the Bluetooth operation.
+void SetActiveMode()
+{
+	setCpuFrequencyMhz(240);
+	adc_power_on();
+	delay(100);
+	btStart();
+}
 
-  void onDisconnect(BLEServer* pServer) {
-    PrintLn("A client has disconnected");
-	clientConnected = false;
-  }
+/// @brief Sets the modem to sleep mode.
+/// @note This function stops Bluetooth operation, disconnects from the network, and turns off WiFi mode.
+///       It also sets the CPU frequency to 80MHz.
+void setModemSleep()
+{
+	btStop();
+	WiFi.disconnect(true); // Disconnect from the network
+	WiFi.mode(WIFI_OFF);
+	setCpuFrequencyMhz(80);
+	
+}
+
+/// @brief Puts the device into hibernation mode.
+/// @note This function configures power domains and puts the device into deep sleep mode.
+void Hibernation()
+{
+	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
+	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF);
+	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF);
+	esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_OFF);
+	esp_deep_sleep_start();
+}
+
+/// @brief Callbacks for BLE client events.
+class BLECallbacks : public BLEClientCallbacks
+{
+	/// @brief Callback function when a client connects.
+	/// @param pServer Pointer to the BLEClient object representing the server.
+	void onConnect(BLEClient *pServer)
+	{
+		PrintLn("The client has connected");
+		serverConnected = true;
+	}
+
+	/// @brief Callback function when a client disconnects.
+	/// @param pServer Pointer to the BLEClient object representing the server.
+	void onDisconnect(BLEClient *pServer)
+	{
+		PrintLn("The client has disconnected");
+
+		PrintLn("Millis onDisconnect");
+		PrintLn(millis());
+		serverConnected = false;
+		Hibernation();
+	}
 };
-
 
 /// @brief Prints wake up reason
 void printWakeupReason()
@@ -73,122 +149,339 @@ void printWakeupReason()
 	}
 }
 
-void setModemSleep() {
-	btStop();
-	//adc_power_off(); TODO: Delete
-    WiFi.disconnect(true);  // Disconnect from the network
-    WiFi.mode(WIFI_OFF);
-    setCpuFrequencyMhz(80);
-    // Use this if 40Mhz is not supported
-    // setCpuFrequencyMhz(40); //TODO: Try with this later, when the communication part is done.
-}
-
-void setActiveMode() {
-	setCpuFrequencyMhz(240);
-	adc_power_on();
-    delay(100);	
-	btStart();
-}
-
-void hibernation()
+/// @brief Checks if the sensor characteristics are available in the sensor BLE service.
+/// @param pRemoteSensorService A pointer to the sensor BLE service.
+/// @note This function obtains references to the temperature, humidity, moisture, and lux characteristics in the sensor BLE service.
+/// @return True if all the characteristics are found, False otherwise.
+bool CheckSensorCharacteristic(BLERemoteService *pRemoteSensorService)
 {
-	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
-	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF);
-	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF);
-	esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_OFF);
-	esp_deep_sleep_start();
-}
+	// Obtain a reference to the characteristic in the service of the remote BLE server.
 
-void broadcastBLE(Sensor::Readings readings) {
-	PrintLn("millis: in modem sleep");
-	PrintLn(millis());
-	setActiveMode();
-
-	BLEDevice::init("Plantt");
-	BLEServer *pServer = BLEDevice::createServer();
-	pServer->setCallbacks(new BLECallbacks());
-	BLEService *pService = pServer->createService(SERVICE_UUID);
-
-	//Temperature
-	pCharacteristicTemperature = pService->createCharacteristic(
-		CHARACTERISTICS_TEMPERATURE_UUID,
-		BLECharacteristic::PROPERTY_READ);
-	BLEDescriptor temperatureDescriptor(BLEUUID((uint16_t)0x0543));
-	//BLEDescriptor temperatureDescriptor(BLEUUID((uint16_t)0x2902));
-
-	temperatureDescriptor.setValue("TemperatureCelcius");
-	pCharacteristicTemperature->addDescriptor(&temperatureDescriptor);
-	pCharacteristicTemperature->setValue(readings.temperature);
-
-	//Humidity
-	pCharacteristicHumidity = pService->createCharacteristic(
-		CHARACTERISTICS_HUMIDITY_UUID,
-		BLECharacteristic::PROPERTY_READ);
-	BLEDescriptor humidityDescriptor(BLEUUID((uint16_t)0x0544));
-	//BLEDescriptor humidityDescriptor(BLEUUID((uint16_t)0x2902));
-
-	humidityDescriptor.setValue("HumidityPercentage");
-	pCharacteristicHumidity->addDescriptor(&humidityDescriptor);
-	pCharacteristicHumidity->setValue(readings.humidity);
-
-
-	//Moisture
-	pCharacteristicMoisture = pService->createCharacteristic(
-		CHARACTERISTICS_MOISTURE_UUID,
-		BLECharacteristic::PROPERTY_READ);
-	BLEDescriptor moistureDescriptor(BLEUUID((uint16_t)0x1079));
-	//BLEDescriptor moistureDescriptor(BLEUUID((uint16_t)0x2902));
-
-	moistureDescriptor.setValue("MoisturePercentage");
-	pCharacteristicMoisture->addDescriptor(&moistureDescriptor);
-	pCharacteristicMoisture->setValue(readings.moisture);
-
-	//Lux
-	pCharacteristicLux = pService->createCharacteristic(
-		CHARACTERISTICS_LUX_UUID,
-		BLECharacteristic::PROPERTY_READ);
-	//BLEDescriptor luxDescriptor(BLEUUID((uint16_t)0x2731));
-	BLEDescriptor luxDescriptor(BLEUUID((uint16_t)0x2902));
-
-	luxDescriptor.setValue("LuxPercentage");
-	pCharacteristicLux->addDescriptor(&luxDescriptor);
-	pCharacteristicLux->setValue(readings.lux);
-
-
-	//Sleep
-	pCharacteristicSleep = pService->createCharacteristic(
-		CHARACTERISTICS_SLEEP_UUID,
-		BLECharacteristic::PROPERTY_WRITE);
-	BLEDescriptor sleepDescriptor(BLEUUID((uint16_t)0x2902));
-	pCharacteristicSleep->addDescriptor(&sleepDescriptor);
-
-	uint8_t value = 0;
-	pCharacteristicSleep->setValue((uint8_t*)&value, sizeof(value));
-	pService->start();
-	BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-	pAdvertising->addServiceUUID(SERVICE_UUID);
-	pAdvertising->setScanResponse(true);
-	pAdvertising->setMinPreferred(0x08); //For helping with services discovery.
-
-	BLEDevice::startAdvertising();
-	PrintLn("Characteristic defined! Now you can read it");
-}
-
-void setup()
-{
-	if (PRINT_ENABLED == true)
+	//----------------------------------------------------------------------------------------------
+	// temperature
+	//----------------------------------------------------------------------------------------------
+	pCharacteristicTemperature = pRemoteSensorService->getCharacteristic(temperatureUUID);
+	if (pCharacteristicTemperature == nullptr)
 	{
-		Serial.begin(115200);
-		delay(1000);
+		PrintL("Failed to find our characteristic temperature UUID: ");
+		PrintLn(temperatureUUID.toString().c_str());
+		pClient->disconnect();
+		return false;
+	}
+	PrintLn(" - Found our characteristic for temperature");
+
+	//----------------------------------------------------------------------------------------------
+	// Humidity
+	//----------------------------------------------------------------------------------------------
+	pCharacteristicHumidity = pRemoteSensorService->getCharacteristic(humidityUUID);
+	if (pCharacteristicHumidity == nullptr)
+	{
+		PrintL("Failed to find our characteristic humidity UUID: ");
+		PrintLn(moistureUUID.toString().c_str());
+		pClient->disconnect();
+		return false;
+	}
+	PrintLn(" - Found our characteristic for humidity");
+
+	//----------------------------------------------------------------------------------------------
+	// Moisture
+	//----------------------------------------------------------------------------------------------
+	pCharacteristicMoisture = pRemoteSensorService->getCharacteristic(moistureUUID);
+	if (pCharacteristicMoisture == nullptr)
+	{
+		PrintL("Failed to find our characteristic Moisture UUID: ");
+		PrintLn(moistureUUID.toString().c_str());
+		pClient->disconnect();
+		return false;
+	}
+	PrintLn(" - Found our characteristic for Moisture");
+
+	//----------------------------------------------------------------------------------------------
+	// Lux
+	//----------------------------------------------------------------------------------------------
+	pCharacteristicLux = pRemoteSensorService->getCharacteristic(luxUUID);
+	if (pCharacteristicLux == nullptr)
+	{
+		PrintL("Failed to find our characteristic Lux UUID: ");
+		PrintLn(luxUUID.toString().c_str());
+		pClient->disconnect();
+		return false;
+	}
+	PrintLn(" - Found our characteristic for Lux");
+
+	return true;
+}
+
+/// @brief Checks if the control characteristics are available in the control BLE service.
+/// @param pRemoteControlService A pointer to the control BLE service.
+/// @note This function obtains references to the "Done reading" and "CurrentDevice" characteristics in the control BLE service.
+/// @return True if both characteristics are found, False otherwise.
+bool CheckControlCharacteristic(BLERemoteService *pRemoteControlService)
+{
+	// Obtain a reference to the characteristic in the service of the remote BLE server.
+
+	//----------------------------------------------------------------------------------------------
+	// Done reading
+	//----------------------------------------------------------------------------------------------
+	pCharacteristicDoneReading = pRemoteControlService->getCharacteristic(doneReadingUUID);
+	if (pCharacteristicDoneReading == nullptr)
+	{
+		PrintL("Failed to find our characteristic Done reading UUID: ");
+		PrintLn(doneReadingUUID.toString().c_str());
+		pClient->disconnect();
+		return false;
+	}
+	PrintLn(" - Found our characteristic for Done reading");
+
+	//----------------------------------------------------------------------------------------------
+	// CurrentDevice
+	//----------------------------------------------------------------------------------------------
+	pCharacteristicCurrentDevice = pRemoteControlService->getCharacteristic(currentDeviceUUID);
+	if (pCharacteristicCurrentDevice == nullptr)
+	{
+		PrintL("Failed to find our characteristic CurrentDevice UUID: ");
+		PrintLn(currentDeviceUUID.toString().c_str());
+		pClient->disconnect();
+		return false;
+	}
+	PrintLn(" - Found our characteristic for CurrentDevice");
+
+	return true;
+}
+
+
+/// @brief Forms a connection to a remote BLE server and verifies the availability of sensor and control characteristics.
+/// @note This function connects to the remote BLE server, obtains references to the sensor and control services, and checks for the availability of corresponding characteristics.
+/// @return True if the connection is successful and all necessary characteristics are found, False otherwise.
+bool ConnectToServer()
+{
+	PrintL("Forming a connection to ");
+	PrintLn(myDevice->getAddress().toString().c_str());
+
+	pClient = BLEDevice::createClient();
+	PrintLn(" - Created client");
+
+	pClient->setClientCallbacks(new BLECallbacks());
+
+	// Connect to the remove BLE Server.
+	pClient->connect(myDevice);
+	PrintLn(" - Connected to server");
+
+	// Obtain a reference to the sensor service we are after in the remote BLE server.
+	BLERemoteService *pRemoteSensorService = pClient->getService(serviceSensorUUID);
+	if (pRemoteSensorService == nullptr)
+	{
+		PrintL("Failed to find our service UUID: ");
+		PrintLn(serviceSensorUUID.toString().c_str());
+		pClient->disconnect();
+		return false;
+	}
+	PrintLn(" - Found our sensor service");
+
+	if (!CheckSensorCharacteristic(pRemoteSensorService))
+	{
+		return false;
 	}
 
+	// Obtain a reference to the control service we are after in the remote BLE server.
+	BLERemoteService *pRemoteControlService = pClient->getService(serviceControlUUID);
+	if (pRemoteControlService == nullptr)
+	{
+		PrintL("Failed to find our service UUID: ");
+		PrintLn(serviceControlUUID.toString().c_str());
+		pClient->disconnect();
+		return false;
+	}
+	PrintLn(" - Found our control service");
 
-	#if PRINT_ENABLED == true
-		// Displays the reason for the wake up
-		printWakeupReason();
-	#endif
+	if (!CheckControlCharacteristic(pRemoteControlService))
+	{
+		return false;
+	}
+
+	return true;
+}
+
+/// @brief Writes sensor data to the corresponding characteristics of the remote BLE server.
+/// @param sensorData The sensor data to be written.
+/// @note This function writes the temperature, humidity, moisture, and lux values to their respective characteristics in the remote BLE server. It also sets the "DoneReading" characteristic to indicate that the sensor readings transfer is complete.
+void WriteBLEData(Reading sensorData)
+{
+	//----------------------------------------------------------------------------------------------
+	// Write the value of temperature from the characteristic.
+	//----------------------------------------------------------------------------------------------
+	if (pCharacteristicTemperature->canWrite())
+	{
+		pCharacteristicTemperature->writeValue(std::to_string(sensorData.temperature));
+		PrintL("Writen value for temperature value was: ");
+		PrintLn(sensorData.temperature);
+	}
+
+	//----------------------------------------------------------------------------------------------
+	// Write the value of humidity from the characteristic.
+	//----------------------------------------------------------------------------------------------
+	if (pCharacteristicHumidity->canWrite())
+	{
+		pCharacteristicHumidity->writeValue(std::to_string(sensorData.humidity));
+		PrintL("Writen value for humidity value was: ");
+		PrintLn(sensorData.humidity);
+	}
+
+	//----------------------------------------------------------------------------------------------
+	// Write the value of moisture from the characteristic.
+	//----------------------------------------------------------------------------------------------
+	if (pCharacteristicMoisture->canWrite())
+	{
+		pCharacteristicMoisture->writeValue(sensorData.moisture);
+		PrintL("Writen value for moisture value was: ");
+		PrintLn(sensorData.moisture);
+	}
+
+	//----------------------------------------------------------------------------------------------
+	// Write the value of lux from the characteristic.
+	//----------------------------------------------------------------------------------------------
+	if (pCharacteristicLux->canWrite())
+	{
+		pCharacteristicLux->writeValue(std::to_string(sensorData.lux));
+		PrintL("Writen value for lux value was: ");
+		PrintLn(sensorData.lux);
+	}
+
+	//----------------------------------------------------------------------------------------------
+	// Set sensor to DoneReading.
+	//----------------------------------------------------------------------------------------------
+	if (pCharacteristicDoneReading->canWrite())
+	{
+		PrintLn("Set hub to done reading.");
+		pCharacteristicDoneReading->writeValue(1, false);
+	}
+
+	pClient->disconnect();
+}
+
+/// @brief Callbacks for advertised BLE devices.
+class AdvertisedBLECallbacks : public BLEAdvertisedDeviceCallbacks
+{
+	/// @brief Called when an advertised BLE device is found.
+	/// @param advertisedDevice The advertised BLE device.
+	/// @note Checks if the device's service UUID matches the desired sensor service UUID.
+	///       If a match is found, sets the myDevice variable, sets the doConnect flag to true,
+	///       and stops the BLE scanning process.
+	void onResult(BLEAdvertisedDevice advertisedDevice)
+	{
+		if (advertisedDevice.getServiceUUID().equals(serviceSensorUUID))
+		{
+			PrintLn("Found sensor service with UUID: ");
+			PrintLn(advertisedDevice.toString().c_str());
+			myDevice = new BLEAdvertisedDevice(advertisedDevice);
+			doConnect = true;
+			pBLEScan->stop();
+		}
+	}
+};
+
+/// @brief Initializes the BLE device and starts scanning for advertised devices.
+/// @note This function initializes the BLE device and configures the scanning parameters
+///       before starting the scan for advertised BLE devices.
+void StartBLE()
+{
+	BLEDevice::init("");
+
+	pBLEScan = BLEDevice::getScan();
+	pBLEScan->setAdvertisedDeviceCallbacks(new AdvertisedBLECallbacks());
+	pBLEScan->setActiveScan(true);
+	pBLEScan->setInterval(100);
+	pBLEScan->setWindow(99); // less or equal setInterval value
+}
+
+/// @brief Checks if the current device is able to write data.
+/// @note This function verifies if the current device can read the current device ID.
+///       If the current device ID is 0, it checks if the characteristic can be written
+///       with the sensor ID. If the current device ID matches the sensor ID, it indicates
+///       that the device is able to write data.
+/// @return Returns true if the current device is able to write data, false otherwise.
+bool AbleToWrite()
+{
+	bool result = false;
+
+	if (pCharacteristicCurrentDevice->canRead())
+	{
+		int currentDeviceID = StringToInt(pCharacteristicCurrentDevice->readValue());
+
+		if (currentDeviceID == 0)
+		{
+			if (pCharacteristicCurrentDevice->canWrite())
+			{
+				pCharacteristicCurrentDevice->writeValue(std::to_string(sensorID));
+				result = true;
+			}
+		}
+		else if (currentDeviceID == sensorID)
+		{
+			result = true;
+		}
+	}
+
+	return result;
+}
+
+/// @brief Writes sensor data to the hub if a valid connection is established.
+void WriteToHub()
+{
+	if (doConnect == true)
+	{
+		if (ConnectToServer())
+		{
+			PrintLn("We are now connected to the BLE Server.");
+		}
+		else
+		{
+			PrintLn("We have failed to connect to the server; there is nothin more we will do.");
+		}
+		doConnect = false;
+	}
+
+	if (serverConnected)
+	{
+		int bleAttempts = 0;
+		bool ableToWrite = AbleToWrite();
+		while (ableToWrite == false && bleAttempts <= 10)
+		{
+			delay(500);
+			ableToWrite = AbleToWrite();
+			bleAttempts++;
+		}
+
+		if (ableToWrite)
+		{
+			WriteBLEData(reading);
+		}
+	}
+}
+
+/// @brief Initializes the system, sets up the sensor, activates the mode, starts BLE, enables timer wakeup, and prepares for operation.
+void setup()
+{
+#if PRINT_ENABLED == true
+	Serial.begin(115200);
+	delay(1000);
+	// Displays the reason for the wake up
+	printWakeupReason();
+#endif
 
 	setModemSleep();
+
+	Sensor *sensor = new Sensor();
+	reading = sensor->getSensorData();
+
+	delete sensor;
+
+	SetActiveMode();
+
+	PrintLn("Millis Startup");
+	PrintLn(millis());
+
+	StartBLE();
 
 	pinMode(buttonPin, INPUT);
 
@@ -197,54 +490,38 @@ void setup()
 	PrintLn("ESP32 wake-up in " + String(TIME_TO_SLEEP) + " seconds");
 
 	PrintLn("Starting BLE work!");
-
-	
 }
 
-int buttonState = 0;
+/// @brief Executes the main loop of the program, including button state check, BLE scanning, data writing to the hub, and hibernation.
+///        The function checks the state of a button, performs BLE scanning to discover devices, prints the count of found devices,
+///        writes data to the hub if the server is connected and able to write, and triggers hibernation based on timeout conditions.
 void loop()
-{	
+{
 	buttonState = digitalRead(GPIO_NUM_32);
 
 	if (buttonState == true)
 	{
-		//Blink a LED here or something.
+		// Blink a LED here or something.
 		if (millis() > 5000)
 		{
-			//Do setup here.
+			// Do setup here.
 		}
-		
-	} 
-	else if (broadcastStarted == false)
-	{
-		broadcastStarted = true;
-		Sensor sensor;
-		Sensor::Readings readings = sensor.getSensorData();
-		broadcastBLE(readings);
 	}
 
-	//Try to sleep on disconnect instead and timeout.
+	BLEScanResults foundDevices = pBLEScan->start(5, false);
+	PrintL("Devices found: ");
+	PrintLn(foundDevices.getCount());
+	PrintLn("Scan done!");
 
-	if (*pCharacteristicSleep->getData() == 1) 
-	{
-		PrintLn();
-		PrintLn("millis: since start");
-		PrintLn(millis());
-		PrintLn("Goes into hibernation mode by request");
-		PrintLn("----------------------");
-		BLEDevice::stopAdvertising();
-		delay(100);
-		hibernation();
-	}
+	WriteToHub();
 
-	if (millis() > 8000 && clientConnected == false) //Before it was 100000
-	{ // 30s = 30000 ms. 1 min = 60000 ms.
+	if (millis() > 8000 && serverConnected == false) // Before it was 100000
+	{												 // 30s = 30000 ms. 1 min = 60000 ms.
 		PrintLn();
 		PrintLn("Goes into hibernation mode by timeout");
 		PrintLn("----------------------");
-		BLEDevice::stopAdvertising();
 		delay(100);
-		hibernation();
+		Hibernation();
 	}
 
 	if (millis() > 12000)
@@ -252,9 +529,8 @@ void loop()
 		PrintLn();
 		PrintLn("Goes into hibernation mode by timeout");
 		PrintLn("----------------------");
-		BLEDevice::stopAdvertising();
 		delay(100);
-		hibernation();
+		Hibernation();
 	}
 
 	delay(150);

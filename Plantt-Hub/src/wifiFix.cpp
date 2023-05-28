@@ -8,7 +8,6 @@
 // https://github.com/espressif/arduino-esp32/issues/6129
 //
 
-
 #define WIFI_CLIENT_FLUSH_BUFFER_SIZE    (1024)
 
 void WiFiClientFixed::flush() {

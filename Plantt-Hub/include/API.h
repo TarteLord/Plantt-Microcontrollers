@@ -4,9 +4,9 @@
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include "preprocessors.h"
-#include "readings.h"
 #include "timeRTC.h"
 #include "wifiFix.h"
+#include "sensorData.h"
 
 class API
 {
@@ -14,19 +14,20 @@ private:
 	char _accessToken[400];
 	unsigned long _expireEpoch;
 
-	// Maybe make identity and secret into pointers, depends on spiffs
 	const char *_identity;
 	const char *_secret;
 
 	String GetAccessToken();
 	bool ValidateLoginJson(String jsonString);
 	bool AccessTokenValid();
+	char *getJsonFormattedSensorData(SensorData reading);
+	void freeString(char* strArr);
 
 public:
 	API(const char *pIdentity, const char *pSecret);
-	~API();
 
-	int PostReadingsAPI(Readings readings, int sensorID);
+	int PostReadingAPI(SensorData reading);
+	int PostReadingsAPI(SensorData *readings, int readingsAmount);
 	bool SetAccessToken();
 };
 

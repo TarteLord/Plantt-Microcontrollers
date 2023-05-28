@@ -1,5 +1,9 @@
 #include "API.h"
 
+/// @brief Constructs an instance of the API class with the specified identity and secret.
+///        It initializes the access token and checks if the login is successful.
+/// @param pIdentity The identity used for authentication.
+/// @param pSecret The secret used for authentication.
 API::API(const char *pIdentity, const char *pSecret) : _accessToken(""), _expireEpoch(0), _identity(pIdentity), _secret(pSecret)
 {
 	if (SetAccessToken())
@@ -8,15 +12,15 @@ API::API(const char *pIdentity, const char *pSecret) : _accessToken(""), _expire
 	}
 }
 
-API::~API()
-{
-}
-
+/// @brief Sets the access token by validating the login JSON string obtained from GetAccessToken().
+/// @return `true` if the access token is successfully set, `false` otherwise.
 bool API::SetAccessToken()
 {
 	return API::ValidateLoginJson(GetAccessToken());
 }
 
+/// @brief Checks if the access token is still valid based on the current epoch time.
+/// @return `true` if the access token is still valid, `false` otherwise.
 bool API::AccessTokenValid()
 {
 	TimeRTC *timertc = TimeRTC::GetInstance();
@@ -25,7 +29,7 @@ bool API::AccessTokenValid()
 	PrintLn("Get _expireEpoch Time:");
 	PrintLn(_expireEpoch);
 
-	if (timertc->GetEpochTime() >= (_expireEpoch /*+ 600 */))
+	if (timertc->GetEpochTime() >= (_expireEpoch))
 	{
 		PrintLn("AccessTokenValid false");
 		return false;
@@ -34,6 +38,9 @@ bool API::AccessTokenValid()
 	return true;
 }
 
+/// @brief Validates the login JSON string and extracts the expire and accessToken values.
+/// @param jsonString The JSON string to be validated.
+/// @return `true` if the validation and extraction are successful, `false` otherwise.
 bool API::ValidateLoginJson(String jsonString)
 {
 	const String expireKey = "\"expire\":";
@@ -76,7 +83,7 @@ String API::GetAccessToken()
 	char hostHttp[38] = "http://www.plantt.dk/api/v1/hub/login";
 
 	char body[280] = "{\"identity\":";
-	strcat(body, "\"");
+strcat(body, "\"");
 	strcat(body, _identity);
 	strcat(body, "\"");
 	strcat(body, ",\"secret\":");
@@ -119,12 +126,46 @@ String API::GetAccessToken()
 	return response;
 }
 
-/// @brief Post data to API, using http request.
-/// @param readings
-/// @return http response codee
-int API::PostReadingsAPI(Readings readings, int sensorID)
+/// @brief Generates a JSON-formatted string representing the provided SensorData.
+/// @param reading The SensorData object to be formatted as JSON.
+/// @return A dynamically allocated char array containing the JSON-formatted string.
+char *API::getJsonFormattedSensorData(SensorData reading) 
 {
+	char* body = new char[125]; //should be the max size of a object.
+	
+	/// Construct the JSON-formatted string.
+	strcpy(body, "{\"sensorId\":");
+	sprintf(body + strlen(body), "%d", reading.sensorID);
+	strcat(body, ",\"temperature\":");
+	sprintf(body + strlen(body), "%.1f", reading.temperature);
+	strcat(body, ",\"humidity\":");
+	sprintf(body + strlen(body), "%.1f", reading.humidity);
+	strcat(body, ",\"lux\":");
+	sprintf(body + strlen(body), "%.1f", reading.lux);
+	strcat(body, ",\"moisture\":");
+	sprintf(body + strlen(body), "%d", reading.moisture);
+	strcat(body, ",\"timeStamp\":");
+	sprintf(body + strlen(body), "%d", reading.epochTS);
+	strcat(body, "}");
 
+	PrintLn("body:");
+	PrintLn(body);
+	
+	return body;
+}
+
+/// @brief Frees the dynamically allocated memory of a char array.
+/// @param strArr The char array to be freed.
+void API::freeString(char* strArr)
+{
+    delete[] strArr; // Free the dynamically allocated memory
+}
+
+/// @brief Posts a single reading to the API.
+/// @param reading The SensorData object representing the reading to be posted.
+/// @return The HTTP response code received from the API.
+int API::PostReadingAPI(SensorData reading)
+{
 	if (!AccessTokenValid())
 	{
 		SetAccessToken();
@@ -133,30 +174,71 @@ int API::PostReadingsAPI(Readings readings, int sensorID)
 	int httpResponseCode = 0;
 	char hostHttp[38] = "http://www.plantt.dk/api/v1/hub/Data";
 
-	char body[82] = "{\"sensorId\":";
-	sprintf(body + strlen(body), "%d", sensorID);
-	strcat(body, ",\"temperature\":");
-	sprintf(body + strlen(body), "%.1f", readings.temperature);
-	strcat(body, ",\"humidity\":");
-	sprintf(body + strlen(body), "%.1f", readings.humidity);
-	strcat(body, ",\"lux\":");
-	sprintf(body + strlen(body), "%.1f", readings.lux);
-	strcat(body, ",\"moisture\":");
-	sprintf(body + strlen(body), "%d", readings.moisture);
-	strcat(body, "}");
-	PrintLn("body:");
-	PrintLn(body);
+	char* body = getJsonFormattedSensorData(reading);
 
 	WiFiClient *wifi = new WiFiClientFixed();
 	HTTPClient http;
 	http.begin(*wifi, hostHttp);
 
-	// http.begin(hostHttp); // Specify destination for HTTP request
-	http.addHeader("Content-Type", "application/json");
-
-	char bearer[408] = "Bearer "; // Specify content-type header
+	http.addHeader("Content-Type", "application/json"); // Specify content-type header
+	char bearer[408] = "Bearer "; 
 	strcat(bearer, _accessToken);
-	http.addHeader("Authorization", bearer); // Specify content-type header
+	http.addHeader("Authorization", bearer); // Specify bearer Authorization
+	httpResponseCode = http.POST(body);
+
+	http.end(); // Free resources
+	freeString(body);
+	delete wifi;
+
+	return httpResponseCode;
+}
+
+/// @brief Posts multiple readings to the API.
+/// @param readings An array of SensorData objects representing the readings to be posted.
+/// @param readingsAmount The number of readings in the array.
+/// @return The HTTP response code received from the API.
+int API::PostReadingsAPI(SensorData *readings, int readingsAmount)
+{
+	if (!AccessTokenValid())
+	{
+		SetAccessToken();
+	}
+
+	int httpResponseCode = 0;
+	char hostHttp[41] = "http://www.plantt.dk/api/v1/hub/BulkData";
+	
+	PrintLn("readingsAmount:");
+	PrintLn(readingsAmount);
+
+	char body[(125 * readingsAmount) + (readingsAmount) + 2]; //reading body size * amount + commas + []
+
+	strcpy(body, "[");
+	for (int i = 0; i < readingsAmount; i++)
+	{
+		char* readingJson = getJsonFormattedSensorData(readings[i]);
+		strcat(body, readingJson);
+		freeString(readingJson);
+		PrintLn("i:");
+		PrintLn(i);
+		if (i != readingsAmount-1)
+		{
+			PrintLn("Add comma");
+			strcat(body, ",");
+		}
+	}
+	strcat(body, "]");
+
+	PrintLn("Post array body:");
+	PrintLn(body);
+	
+	WiFiClient *wifi = new WiFiClientFixed();
+	HTTPClient http;
+	http.begin(*wifi, hostHttp);
+	http.addHeader("Content-Type", "application/json"); // Specify content-type header
+
+	char bearer[408] = "Bearer "; 
+	strcat(bearer, _accessToken);
+	http.addHeader("Authorization", bearer);  // Specify bearer Authorization
 	httpResponseCode = http.POST(body);
 
 	http.end(); // Free resources

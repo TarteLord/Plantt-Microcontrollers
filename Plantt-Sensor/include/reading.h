@@ -1,5 +1,5 @@
-#ifndef READINGS_H
-#define READINGS_H
+#ifndef READING_H
+#define READING_H
 
 typedef struct
 {
@@ -7,6 +7,6 @@ typedef struct
 	float lux;
 	float humidity;
 	float temperature;
-} Readings;
+} Reading;
 
 #endif // READINGS_H
