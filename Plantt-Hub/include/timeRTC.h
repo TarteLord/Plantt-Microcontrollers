@@ -17,7 +17,6 @@ private:
 
 public:
 	static TimeRTC *GetInstance();
-	~TimeRTC();
 
 	bool UpdateRTC();
 	bool RTCValidate();

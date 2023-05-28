@@ -130,21 +130,8 @@ void ClearReadings()
 }
 
 
-/// @brief Resets multiple BLE characteristics to their default values.
-///
-/// This function sets the values of the BLE characteristics to their default values.
-/// The default values are as follows:
-///
-///     Temperature: 0.0f
-///     Humidity: 0.0f
-///     Moisture: 0
-///     Lux: 0.0f
-///     DoneWriting: 0
-///     CurrentDevice: 0
-///
+/// @brief Resets the values of BLE characteristics to zero or empty strings.
 /// @note This function assumes that the BLE characteristics have already been initialized and are accessible through the respective pointers.
-///
-/// @return None
 void ResetBLEChacteristics()
 {
 	std::__cxx11::string zeroFloatStr = "0.0f";
@@ -159,9 +146,9 @@ void ResetBLEChacteristics()
 	pCharacteristicCurrentDevice->setValue(zeroIntStr);
 }
 
-/// @brief Validates BLE data
-/// @param dataBLE
-/// @return bool state of check
+/// @brief Validates the provided BLE sensor data.
+/// @param dataBLE The SensorData object containing the sensor readings.
+/// @return True if the data is valid, false otherwise.
 bool ValidateBLEdata(SensorData dataBLE)
 {
 	try
@@ -186,7 +173,8 @@ bool ValidateBLEdata(SensorData dataBLE)
 }
 
 
-/// @brief read Data from BLE Characteristics and add them to readings[]
+/// @brief Reads and processes the BLE sensor data and add them to readings[]
+/// @return True if the data is successfully read and processed, false otherwise.
 bool ReadData()
 {
 	SensorData dataBLE = {};
@@ -246,14 +234,19 @@ bool ReadData()
 	return false;
 }
 
+/// @brief Callbacks for BLE server events.
 class BLECallbacks : public BLEServerCallbacks
 {
+	/// @brief Called when a client is connected to the BLE server.
+	/// @param pServer Pointer to the BLE server object.
 	void onConnect(BLEServer *pServer)
 	{
 		PrintLn("A client has connected");
 		clientConnected = true;
 	}
 
+	/// @brief Called when a client is disconnected from the BLE server.
+	/// @param pServer Pointer to the BLE server object.
 	void onDisconnect(BLEServer *pServer)
 	{
 		PrintLn("A client has disconnected");
@@ -263,6 +256,22 @@ class BLECallbacks : public BLEServerCallbacks
 	}
 };
 
+/// @brief Initializes and starts the BLE server.
+///
+/// This function initializes the BLE server by creating the necessary services, characteristics,
+/// and descriptors for sensor data and control. It sets the initial values of the characteristics
+/// to zero, configures the descriptors, and starts the services. The function also configures the
+/// BLE advertising and starts broadcasting the services. The broadcastStarted flag is set to true
+/// to indicate that the broadcasting has started.
+///
+/// @note This function assumes that the necessary UUIDs and objects are defined and accessible.
+///
+/// @note The values of the characteristics are set to zero initially.
+///
+/// @note The function uses descriptors to provide additional information about the characteristics.
+///
+/// @see StopBLE()
+///
 void StartBLE()
 {
 	BLEDevice::init("Plantt");
@@ -346,11 +355,24 @@ void StartBLE()
 	PrintLn("Characteristic defined! Now you can read it");
 }
 
+/// @brief Stops the BLE server and deinitializes the BLE device.
+///
+/// This function stops the BLE server, deinitializes the BLE device, and introduces a small delay
+/// for cleanup purposes. It is used to gracefully shut down the BLE functionality when it is no
+/// longer needed.
+///
+/// @note This function should be called before shutting down the program or when BLE functionality
+/// is no longer required.
+///
+/// @see StartBLE()
+///
 void StopBLE()
 {
 	BLEDevice::deinit();
 	delay(100);
 }
+
+/// @brief Stops the WiFi connection and turns off the WiFi mode.
 void StopWIFI()
 {
 	WiFi.disconnect();
@@ -358,6 +380,9 @@ void StopWIFI()
 	delay(100);
 }
 
+/// @brief Configures and establishes a WiFi connection.
+/// @note This function relies on the configuration values stored in the Config singleton instance.
+/// @return True if the WiFi connection is successfully established, false otherwise.
 bool StartWIFI()
 {
 	Config &config = Config::GetInstance();
@@ -386,6 +411,22 @@ bool StartWIFI()
 	return true;
 }
 
+/// @brief Posts the collected sensor data to the API.
+/// 
+/// This function stops the BLE communication and broadcasts, connects to the configured WiFi network,
+/// and sends the collected sensor data to the API using the API instance. It handles the API response,
+/// checks for success or error conditions, and performs appropriate actions based on the response. If
+/// the response indicates success, it clears the collected readings. If the response indicates an error
+/// or an API issue, it logs an error message and delays for a certain period before retrying. After
+/// processing the API response, the function stops the WiFi connection and restarts the BLE communication.
+///
+/// @note This function assumes that the necessary configurations (WiFi SSID, password, API identity, secret)
+///       are already set using the Config class.
+///
+/// @note This function relies on the existence of the `api` instance of the API class to interact with the API.
+///
+/// @note This function assumes that the collected sensor data is stored in the `readings` array and the
+///       number of readings is stored in the `currentAmountReadings` variable.
 void PostDataToAPI()
 {
 	StopBLE();
@@ -430,6 +471,22 @@ void PostDataToAPI()
 	StartBLE();
 }
 
+/// @brief Setup function that initializes the Plantt Hub.
+///
+/// This function performs the initialization steps required to start the Plantt Hub. It sets up the
+/// serial communication for debugging purposes if PRINT_ENABLED is true. It initializes the Config singleton
+/// and checks if the configuration is already stored in the Config class. If the configuration is empty,
+/// it writes some sample data to the configuration using the WriteConfig function. After a delay, it prints
+/// a startup message and attempts to connect to the WiFi network using the StartWIFI function. If the WiFi
+/// connection is successful, it initializes the RTC singleton and creates an instance of the API class
+/// using the identity and secret from the configuration. Finally, it stops the WiFi connection, delays for a
+/// short period, and starts the BLE communication using the StartBLE function. It prints a message indicating
+/// the start of BLE work.
+///
+/// @note This function assumes that the necessary configurations (WiFi SSID, password, API identity, secret)
+///       are already set using the Config class.
+///
+/// @note This function assumes that the StartWIFI and StartBLE functions are defined.
 void setup()
 {
 	if (PRINT_ENABLED == true)
@@ -438,7 +495,7 @@ void setup()
 		delay(1000);
 	}
 
-	// Initiate the RTC singleton
+	// Initiate the Config singleton
 	Config &config = Config::GetInstance();
 
 	//Only for debug, purposes
@@ -485,6 +542,12 @@ void setup()
 	PrintLn("Starting BLE work!");
 }
 
+/// @brief Main loop function that handles the Plantt Hub's main operations.
+///
+/// This function is the main loop of the Plantt Hub program. It starts by checking if the BLE advertising has
+/// been started. If not, it calls the BLEDevice::startAdvertising() function to start advertising. Then, it checks
+/// if a client is not connected and there is at least one reading available. If both conditions are met, it calls the
+/// PostDataToAPI() function to post the data to the API. 
 void loop()
 {
 	if (!broadcastStarted)
@@ -499,6 +562,7 @@ void loop()
 		PrintLn("We got data to send");
 		PostDataToAPI();
 	}
+
 
 	PrintLn("In the main loop");
 

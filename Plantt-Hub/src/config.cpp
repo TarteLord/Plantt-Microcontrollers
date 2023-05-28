@@ -9,19 +9,20 @@ Config::Config()
 		return;
 	}
 	ReadConfig();
+
+	SPIFFS.end();
 }
 
-Config::~Config()
-{
-}
-
+/// @brief Retrieves the singleton instance of the Config class.
+/// @return A reference to the singleton instance.
 Config &Config::GetInstance()
 {
 	static Config instance;
 	return instance;
 }
 
-/// @brief Reads config.txt and sets public props
+/// @brief Reads the configuration parameters from the config.txt file.
+/// @note The config.txt file should contain the parameters in the following order: SSID, password, identity, secret.
 void Config::ReadConfig()
 {
 	File configFile = SPIFFS.open("/config.txt", FILE_READ);
@@ -55,6 +56,11 @@ void Config::ReadConfig()
 bool Config::WriteConfig(String ssidWIFI, String passwordWIFI, String identityAPI, String secretAPI)
 {
 	bool result = false;
+	if (!SPIFFS.begin(true))
+	{
+		PrintLn("Failed to mount SPIFFS");
+		return false;
+	}
 	File configFile = SPIFFS.open("/config.txt", FILE_WRITE);
 	if (!configFile)
 	{
@@ -69,6 +75,8 @@ bool Config::WriteConfig(String ssidWIFI, String passwordWIFI, String identityAP
 	}
 
 	configFile.close();
+
+	SPIFFS.end();
 
 	return result;
 }

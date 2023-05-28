@@ -1,5 +1,9 @@
 #include "API.h"
 
+/// @brief Constructs an instance of the API class with the specified identity and secret.
+///        It initializes the access token and checks if the login is successful.
+/// @param pIdentity The identity used for authentication.
+/// @param pSecret The secret used for authentication.
 API::API(const char *pIdentity, const char *pSecret) : _accessToken(""), _expireEpoch(0), _identity(pIdentity), _secret(pSecret)
 {
 	if (SetAccessToken())
@@ -8,15 +12,15 @@ API::API(const char *pIdentity, const char *pSecret) : _accessToken(""), _expire
 	}
 }
 
-API::~API()
-{
-}
-
+/// @brief Sets the access token by validating the login JSON string obtained from GetAccessToken().
+/// @return `true` if the access token is successfully set, `false` otherwise.
 bool API::SetAccessToken()
 {
 	return API::ValidateLoginJson(GetAccessToken());
 }
 
+/// @brief Checks if the access token is still valid based on the current epoch time.
+/// @return `true` if the access token is still valid, `false` otherwise.
 bool API::AccessTokenValid()
 {
 	TimeRTC *timertc = TimeRTC::GetInstance();
@@ -25,7 +29,7 @@ bool API::AccessTokenValid()
 	PrintLn("Get _expireEpoch Time:");
 	PrintLn(_expireEpoch);
 
-	if (timertc->GetEpochTime() >= (_expireEpoch /*+ 600 */))
+	if (timertc->GetEpochTime() >= (_expireEpoch))
 	{
 		PrintLn("AccessTokenValid false");
 		return false;
@@ -34,6 +38,9 @@ bool API::AccessTokenValid()
 	return true;
 }
 
+/// @brief Validates the login JSON string and extracts the expire and accessToken values.
+/// @param jsonString The JSON string to be validated.
+/// @return `true` if the validation and extraction are successful, `false` otherwise.
 bool API::ValidateLoginJson(String jsonString)
 {
 	const String expireKey = "\"expire\":";
@@ -119,11 +126,14 @@ strcat(body, "\"");
 	return response;
 }
 
-
+/// @brief Generates a JSON-formatted string representing the provided SensorData.
+/// @param reading The SensorData object to be formatted as JSON.
+/// @return A dynamically allocated char array containing the JSON-formatted string.
 char *API::getJsonFormattedSensorData(SensorData reading) 
 {
-	//{"sensorId": 2147483647,"temperature": 23.22,"humidity": 100.20,"lux": 10000.100,"moisture": 123,"timeStamp": 1685218608}
 	char* body = new char[125]; //should be the max size of a object.
+	
+	/// Construct the JSON-formatted string.
 	strcpy(body, "{\"sensorId\":");
 	sprintf(body + strlen(body), "%d", reading.sensorID);
 	strcat(body, ",\"temperature\":");
@@ -137,7 +147,6 @@ char *API::getJsonFormattedSensorData(SensorData reading)
 	strcat(body, ",\"timeStamp\":");
 	sprintf(body + strlen(body), "%d", reading.epochTS);
 	strcat(body, "}");
-	//strcat(body, "\0"); //Do we need to null terminate the string?
 
 	PrintLn("body:");
 	PrintLn(body);
@@ -145,14 +154,16 @@ char *API::getJsonFormattedSensorData(SensorData reading)
 	return body;
 }
 
+/// @brief Frees the dynamically allocated memory of a char array.
+/// @param strArr The char array to be freed.
 void API::freeString(char* strArr)
 {
     delete[] strArr; // Free the dynamically allocated memory
 }
 
-/// @brief Post data to API, using http request.
-/// @param readings
-/// @return http response code
+/// @brief Posts a single reading to the API.
+/// @param reading The SensorData object representing the reading to be posted.
+/// @return The HTTP response code received from the API.
 int API::PostReadingAPI(SensorData reading)
 {
 	if (!AccessTokenValid())
@@ -169,12 +180,10 @@ int API::PostReadingAPI(SensorData reading)
 	HTTPClient http;
 	http.begin(*wifi, hostHttp);
 
-	// http.begin(hostHttp); // Specify destination for HTTP request
-	http.addHeader("Content-Type", "application/json");
-
-	char bearer[408] = "Bearer "; // Specify content-type header
+	http.addHeader("Content-Type", "application/json"); // Specify content-type header
+	char bearer[408] = "Bearer "; 
 	strcat(bearer, _accessToken);
-	http.addHeader("Authorization", bearer); // Specify content-type header
+	http.addHeader("Authorization", bearer); // Specify bearer Authorization
 	httpResponseCode = http.POST(body);
 
 	http.end(); // Free resources
@@ -184,6 +193,10 @@ int API::PostReadingAPI(SensorData reading)
 	return httpResponseCode;
 }
 
+/// @brief Posts multiple readings to the API.
+/// @param readings An array of SensorData objects representing the readings to be posted.
+/// @param readingsAmount The number of readings in the array.
+/// @return The HTTP response code received from the API.
 int API::PostReadingsAPI(SensorData *readings, int readingsAmount)
 {
 	if (!AccessTokenValid())
@@ -211,11 +224,6 @@ int API::PostReadingsAPI(SensorData *readings, int readingsAmount)
 		{
 			PrintLn("Add comma");
 			strcat(body, ",");
-		} 
-		else 
-		{
-			PrintLn("Add nothing");
-
 		}
 	}
 	strcat(body, "]");
@@ -226,11 +234,11 @@ int API::PostReadingsAPI(SensorData *readings, int readingsAmount)
 	WiFiClient *wifi = new WiFiClientFixed();
 	HTTPClient http;
 	http.begin(*wifi, hostHttp);
-	http.addHeader("Content-Type", "application/json");
+	http.addHeader("Content-Type", "application/json"); // Specify content-type header
 
-	char bearer[408] = "Bearer "; // Specify content-type header
+	char bearer[408] = "Bearer "; 
 	strcat(bearer, _accessToken);
-	http.addHeader("Authorization", bearer); // Specify content-type header
+	http.addHeader("Authorization", bearer);  // Specify bearer Authorization
 	httpResponseCode = http.POST(body);
 
 	http.end(); // Free resources

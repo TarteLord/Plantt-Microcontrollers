@@ -1,6 +1,8 @@
 #include "tools.h"
 
 /// @brief Convert a std::__cxx11::string to float
+/// @param value The string value to convert.
+/// @return The converted float value.
 float StringToFloat(std::__cxx11::string value)
 {
 	// After using waay to long on this, it's the most reliable way apparently.
@@ -16,6 +18,8 @@ float StringToFloat(std::__cxx11::string value)
 }
 
 /// @brief Convert a std::__cxx11::string to Int
+/// @param value The string value to convert.
+/// @return The converted Int value.
 int StringToInt(std::__cxx11::string value)
 {
 	String arduinoString;

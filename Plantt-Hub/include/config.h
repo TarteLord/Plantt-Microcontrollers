@@ -28,8 +28,6 @@ public:
 	// Static method to access the singleton instance
 	static Config &GetInstance();
 
-	~Config();
-
 	bool WriteConfig(String ssidWIFI, String passwordWIFI, String identityAPI, String secretAPI);
 	
 	// Delete the copy constructor and assignment operator

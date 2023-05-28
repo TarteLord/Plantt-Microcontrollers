@@ -7,7 +7,6 @@
 #include "timeRTC.h"
 #include "wifiFix.h"
 #include "sensorData.h"
-//#include "reading.h"
 
 class API
 {
@@ -15,7 +14,6 @@ private:
 	char _accessToken[400];
 	unsigned long _expireEpoch;
 
-	// Maybe make identity and secret into pointers, depends on spiffs
 	const char *_identity;
 	const char *_secret;
 
@@ -27,7 +25,6 @@ private:
 
 public:
 	API(const char *pIdentity, const char *pSecret);
-	~API();
 
 	int PostReadingAPI(SensorData reading);
 	int PostReadingsAPI(SensorData *readings, int readingsAmount);
