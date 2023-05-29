@@ -318,7 +318,7 @@ void WriteBLEData(Reading sensorData)
 	//----------------------------------------------------------------------------------------------
 	if (pCharacteristicTemperature->canWrite())
 	{
-		pCharacteristicTemperature->writeValue(std::to_string(sensorData.temperature));
+		pCharacteristicTemperature->writeValue(std::__cxx11::to_string(sensorData.temperature));
 		PrintL("Writen value for temperature value was: ");
 		PrintLn(sensorData.temperature);
 	}
@@ -328,7 +328,7 @@ void WriteBLEData(Reading sensorData)
 	//----------------------------------------------------------------------------------------------
 	if (pCharacteristicHumidity->canWrite())
 	{
-		pCharacteristicHumidity->writeValue(std::to_string(sensorData.humidity));
+		pCharacteristicHumidity->writeValue(std::__cxx11::to_string(sensorData.humidity));
 		PrintL("Writen value for humidity value was: ");
 		PrintLn(sensorData.humidity);
 	}
@@ -348,7 +348,7 @@ void WriteBLEData(Reading sensorData)
 	//----------------------------------------------------------------------------------------------
 	if (pCharacteristicLux->canWrite())
 	{
-		pCharacteristicLux->writeValue(std::to_string(sensorData.lux));
+		pCharacteristicLux->writeValue(std::__cxx11::to_string(sensorData.lux));
 		PrintL("Writen value for lux value was: ");
 		PrintLn(sensorData.lux);
 	}
@@ -362,7 +362,82 @@ void WriteBLEData(Reading sensorData)
 		pCharacteristicDoneReading->writeValue(1, false);
 	}
 
-	pClient->disconnect();
+}
+
+/// @brief validates sensor data to the corresponding characteristics of the remote BLE server.
+/// @param sensorData The sensor data to be validated against.
+/// @note This function validate the temperature, humidity, moisture, and lux values to their respective characteristics in the remote BLE server.
+bool ValidateBLEData(Reading sensorData)
+{
+	//----------------------------------------------------------------------------------------------
+	// validate the value of temperature from the characteristic.
+	//----------------------------------------------------------------------------------------------
+	if (pCharacteristicTemperature->canRead())
+	{
+		std::__cxx11::string value = pCharacteristicTemperature->readValue();
+
+		if (std::__cxx11::to_string(sensorData.temperature) != value)
+		{
+			PrintL("validated value for temperature value was: ");
+			PrintLn(value);
+			return false;
+		}
+	}
+
+	//----------------------------------------------------------------------------------------------
+	// validate the value of humidity from the characteristic.
+	//----------------------------------------------------------------------------------------------
+	if (pCharacteristicHumidity->canRead())
+	{
+		std::__cxx11::string value = pCharacteristicHumidity->readValue();
+
+		if (std::__cxx11::to_string(sensorData.humidity) != value)
+		{
+			PrintL("validated value for humidity value was: ");
+			PrintLn(value);
+			return false;
+		}
+	}
+
+	//----------------------------------------------------------------------------------------------
+	// validate the value of moisture from the characteristic.
+	//----------------------------------------------------------------------------------------------
+	if (pCharacteristicMoisture->canWrite())
+	{
+		pCharacteristicMoisture->writeValue(sensorData.moisture);
+		PrintL("Writen value for moisture value was: ");
+		PrintLn(sensorData.moisture);
+	}
+
+	if (pCharacteristicMoisture->canRead())
+	{
+		int value = (int)pCharacteristicMoisture->readUInt32();
+
+		if (value != sensorData.moisture)
+		{
+			PrintL("validated value for moisture value was: ");
+			PrintLn(value);
+			return false;
+		}
+	}
+
+	//----------------------------------------------------------------------------------------------
+	// validate the value of lux from the characteristic.
+	//----------------------------------------------------------------------------------------------
+	if (pCharacteristicLux->canRead())
+	{
+		std::__cxx11::string value = pCharacteristicLux->readValue();
+
+		if (std::__cxx11::to_string(sensorData.lux) != value)
+		{
+			PrintL("validated value for lux value was: ");
+			PrintLn(value);
+			return false;
+		}
+	}
+
+	return true;
+
 }
 
 /// @brief Callbacks for advertised BLE devices.
@@ -463,7 +538,23 @@ void WriteToHub()
 
 		if (ableToWrite)
 		{
+			//The DHT sensor is just awfull, and sometimes return 0.0F. 
+			//So lets just validate our reading before sending it.
+			if (reading.humidity == 0.0F || reading.lux == 0.0F || reading.moisture == 0 || reading.temperature == 0.0F)
+			{
+				Sensor *sensor = new Sensor();
+				reading = sensor->getSensorData();
+
+				delete sensor;
+			}
+			
 			WriteBLEData(reading);
+			if (!ValidateBLEData(reading))
+			{
+				WriteBLEData(reading);
+			}
+			
+			pClient->disconnect();
 		}
 	}
 }

@@ -170,8 +170,6 @@ bool ValidateBLEdata(SensorData dataBLE)
 	{
 		if (dataBLE.sensorID == 0)
 			return false;
-		if (dataBLE.humidity == 0.0f)
-			return false;
 		if (dataBLE.moisture == 0)
 			return false;
 		if (dataBLE.lux == 0.0f)
@@ -304,7 +302,7 @@ void StartBLE()
 	// Temperature
 	pCharacteristicTemperature = pServiceSensor->createCharacteristic(
 		CHARACTERISTICS_TEMPERATURE_UUID,
-		BLECharacteristic::PROPERTY_WRITE);
+		BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ);
 	BLEDescriptor temperatureDescriptor(BLEUUID((uint16_t)0x0543));
 
 	temperatureDescriptor.setValue("TemperatureCelcius");
@@ -314,7 +312,7 @@ void StartBLE()
 	// Humidity
 	pCharacteristicHumidity = pServiceSensor->createCharacteristic(
 		CHARACTERISTICS_HUMIDITY_UUID,
-		BLECharacteristic::PROPERTY_WRITE);
+		BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ);
 	BLEDescriptor humidityDescriptor(BLEUUID((uint16_t)0x0544));
 
 	humidityDescriptor.setValue("HumidityPercentage");
@@ -324,7 +322,7 @@ void StartBLE()
 	// Moisture
 	pCharacteristicMoisture = pServiceSensor->createCharacteristic(
 		CHARACTERISTICS_MOISTURE_UUID,
-		BLECharacteristic::PROPERTY_WRITE);
+		BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ);
 	BLEDescriptor moistureDescriptor(BLEUUID((uint16_t)0x1079));
 
 	moistureDescriptor.setValue("MoisturePercentage");
@@ -334,7 +332,7 @@ void StartBLE()
 	// Lux
 	pCharacteristicLux = pServiceSensor->createCharacteristic(
 		CHARACTERISTICS_LUX_UUID,
-		BLECharacteristic::PROPERTY_WRITE);
+		BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ);
 	BLEDescriptor luxDescriptor(BLEUUID((uint16_t)0x2731));
 
 	luxDescriptor.setValue("LuxPercentage");
@@ -571,10 +569,10 @@ void setup()
 /// @brief Main loop function that handles the Plantt Hub's main operations.
 void loop()
 {
-		BLEDevice::startAdvertising();
-	if (!broadcastStarted)
+	if (!broadcastStarted || ((esp_timer_get_time() / 1000) - millisOnApiPost) > 30000)
 	{
 		PrintLn("Start advertising");
+		BLEDevice::startAdvertising();
 		broadcastStarted = true;
 	}
 
