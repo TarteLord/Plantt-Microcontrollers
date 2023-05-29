@@ -58,9 +58,10 @@ Reading reading = {};
 #define uS_TO_S_FACTOR 1000000
 
 #if PRINT_ENABLED == true
-#define TIME_TO_SLEEP 8
+#define TIME_TO_SLEEP 60 // 8
 #else
-#define TIME_TO_SLEEP 3600
+// #define TIME_TO_SLEEP 3600
+#define TIME_TO_SLEEP 20
 #endif
 
 /// @brief Sets the active mode of the device.
@@ -83,13 +84,13 @@ void setModemSleep()
 	WiFi.disconnect(true); // Disconnect from the network
 	WiFi.mode(WIFI_OFF);
 	setCpuFrequencyMhz(80);
-	
 }
 
 /// @brief Puts the device into hibernation mode.
 /// @note This function configures power domains and puts the device into deep sleep mode.
 void Hibernation()
 {
+	PrintLn("goes into hibernation");
 	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
 	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF);
 	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF);
@@ -249,7 +250,6 @@ bool CheckControlCharacteristic(BLERemoteService *pRemoteControlService)
 	return true;
 }
 
-
 /// @brief Forms a connection to a remote BLE server and verifies the availability of sensor and control characteristics.
 /// @note This function connects to the remote BLE server, obtains references to the sensor and control services, and checks for the availability of corresponding characteristics.
 /// @return True if the connection is successful and all necessary characteristics are found, False otherwise.
@@ -264,8 +264,14 @@ bool ConnectToServer()
 	pClient->setClientCallbacks(new BLECallbacks());
 
 	// Connect to the remove BLE Server.
-	pClient->connect(myDevice);
+	bool _connected = pClient->connect(myDevice);
 	PrintLn(" - Connected to server");
+	if (!_connected) //sometimes peer device is disconnected before real connection is established. we need to delete BLEClient to close connection in bt stack
+	{
+		delete pClient;
+		delete myDevice;
+		return false;
+	}
 
 	// Obtain a reference to the sensor service we are after in the remote BLE server.
 	BLERemoteService *pRemoteSensorService = pClient->getService(serviceSensorUUID);
@@ -386,6 +392,9 @@ class AdvertisedBLECallbacks : public BLEAdvertisedDeviceCallbacks
 void StartBLE()
 {
 	BLEDevice::init("");
+	esp_err_t errRc = esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_P9); // Set max level power BLE
+	esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_P9);						  // Set max level power BLE
+	esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_SCAN, ESP_PWR_LVL_P9);					  // Set max level power BLE
 
 	pBLEScan = BLEDevice::getScan();
 	pBLEScan->setAdvertisedDeviceCallbacks(new AdvertisedBLECallbacks());
@@ -512,11 +521,12 @@ void loop()
 	PrintL("Devices found: ");
 	PrintLn(foundDevices.getCount());
 	PrintLn("Scan done!");
+	pBLEScan->clearResults(); // delete results from BLEScan buffer to release memory
 
 	WriteToHub();
 
-	if (millis() > 8000 && serverConnected == false) // Before it was 100000
-	{												 // 30s = 30000 ms. 1 min = 60000 ms.
+	if (millis() > 10000 && serverConnected == false) // 10s = 10000 ms. 1 min = 60000 ms.
+	{
 		PrintLn();
 		PrintLn("Goes into hibernation mode by timeout");
 		PrintLn("----------------------");
@@ -524,8 +534,8 @@ void loop()
 		Hibernation();
 	}
 
-	if (millis() > 12000)
-	{ // 30s = 30000 ms. 1 min = 60000 ms.
+	if (millis() > 12000) // 12s = 12000 ms. 1 min = 60000 ms.
+	{
 		PrintLn();
 		PrintLn("Goes into hibernation mode by timeout");
 		PrintLn("----------------------");

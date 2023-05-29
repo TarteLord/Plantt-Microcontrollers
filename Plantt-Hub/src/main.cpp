@@ -289,6 +289,9 @@ class BLECallbacks : public BLEServerCallbacks
 void StartBLE()
 {
 	BLEDevice::init("Plantt");
+	esp_err_t errRc = esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT,ESP_PWR_LVL_P9); //Set max level power BLE
+	esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_P9); //Set max level power BLE
+ 	esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_SCAN ,ESP_PWR_LVL_P9); //Set max level power BLE
 	BLEServer *pServer = BLEDevice::createServer();
 	pServer->setCallbacks(new BLECallbacks());
 	BLEService *pServiceSensor = pServer->createService(SERVICE_SENSOR_UUID);
@@ -568,15 +571,15 @@ void setup()
 /// @brief Main loop function that handles the Plantt Hub's main operations.
 void loop()
 {
+		BLEDevice::startAdvertising();
 	if (!broadcastStarted)
 	{
 		PrintLn("Start advertising");
-		BLEDevice::startAdvertising();
 		broadcastStarted = true;
 	}
 
-	if (clientConnected == false && currentAmountReadings >= 1 && ((esp_timer_get_time() / 1000) - millisOnApiPost) > 30000 
-		|| clientConnected == false && currentAmountReadings >= 5) 
+	if (clientConnected == false && currentAmountReadings >= 1 /* && ((esp_timer_get_time() / 1000) - millisOnApiPost) > 30000  */
+		/* || clientConnected == false && currentAmountReadings >= 5 */) 
 	{
 		TimeRTC *timeRTC = TimeRTC::GetInstance();
 		millisOnApiPost = timeRTC->GetEpochTime();
