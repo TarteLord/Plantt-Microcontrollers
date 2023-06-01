@@ -579,11 +579,6 @@ void setup()
  
 	PrintLn("Millis after sensor");
 	PrintLn(millis());
- 
-	reading.humidity = 39.0f;
-	reading.temperature = 23.0f;
-	reading.lux = 123.0f;
-	reading.moisture = 45;
 
 	SetActiveMode();
 
