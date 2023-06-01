@@ -64,6 +64,8 @@ bool clientConnected = false;
 int64_t millisOnLastDisconnect = 0;
 int64_t millisOnApiPost = 0;
 
+int postReadingsSuccessCount = 0;
+
 //----------------------------------------------------------------------------------------------
 // Code
 //----------------------------------------------------------------------------------------------
@@ -102,7 +104,7 @@ void RemoveReading(SensorData value)
 /// @param sensorID ID of reading/SensorData to remove
 void RemoveReading(int sensorID)
 {
-	for (int i = 0; i < currentAmountReadings; i++)
+	for (int i = 0; i <= currentAmountReadings; i++)
 	{
 		if (readings[i].sensorID == sensorID)
 		{
@@ -464,7 +466,20 @@ void PostDataToAPI()
 
 		if ((httpResponseCode >= 200 && httpResponseCode <= 204) || httpResponseCode == 307)
 		{
-			PrintLn("PostReadingsAPI succes");
+			PrintLn("PostReadingsAPI succes amount:");
+			PrintLn(postReadingsSuccessCount);
+			postReadingsSuccessCount++;
+			PrintLn("currentAmountReadings:");
+			PrintLn(currentAmountReadings);
+
+			if (postReadingsSuccessCount == 10)
+			{
+				//There is a weird bug here, so this a quick and dirty fix.
+				//Suspect we have a memory issue
+				ESP.restart();
+				
+			}
+			
 			ClearReadings();
 		}
 		else
@@ -557,6 +572,10 @@ void setup()
 
 		api = new API(config.identity, config.secret);
 	}
+	else {
+		PrintLn("Could not find wifi, restart Plantt-Hub");
+		ESP.restart();
+	}
 
 	StopWIFI();
 	delay(1000);
@@ -576,8 +595,9 @@ void loop()
 		broadcastStarted = true;
 	}
 
-	if (clientConnected == false && currentAmountReadings >= 1 /* && ((esp_timer_get_time() / 1000) - millisOnApiPost) > 30000  */
-		/* || clientConnected == false && currentAmountReadings >= 5 */) 
+	//Send data to API, when no client is connected and 30 sec has passed or more than 5 readings is available.
+	if (clientConnected == false && currentAmountReadings >= 1 /* && ((esp_timer_get_time() / 1000) - millisOnApiPost) > 30000 
+		|| clientConnected == false && currentAmountReadings >= 5 */) //Se om problemet er det samme her
 	{
 		TimeRTC *timeRTC = TimeRTC::GetInstance();
 		millisOnApiPost = timeRTC->GetEpochTime();

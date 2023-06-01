@@ -3,7 +3,7 @@
 /// @brief Initialise Sensor class and setup I2C etc.
 Sensor::Sensor()
 {
-	Wire.begin(GPIO_NUM_16, GPIO_NUM_17);
+	Wire.begin(GPIO_NUM_16, GPIO_NUM_4);
 
 	if (lightMeter->begin(BH1750::ONE_TIME_HIGH_RES_MODE))
 	{

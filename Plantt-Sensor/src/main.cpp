@@ -69,7 +69,6 @@ Reading reading = {};
 ///       and starts the Bluetooth operation.
 void SetActiveMode()
 {
-	setCpuFrequencyMhz(240);
 	adc_power_on();
 	delay(100);
 	btStart();
@@ -83,7 +82,7 @@ void setModemSleep()
 	btStop();
 	WiFi.disconnect(true); // Disconnect from the network
 	WiFi.mode(WIFI_OFF);
-	setCpuFrequencyMhz(80);
+	setCpuFrequencyMhz(80); //We can actually lower the speed without any negative effect.
 }
 
 /// @brief Puts the device into hibernation mode.
@@ -263,7 +262,7 @@ bool ConnectToServer()
 
 	pClient->setClientCallbacks(new BLECallbacks());
 
-	// Connect to the remove BLE Server.
+	// Connect to the remote BLE Server.
 	bool _connected = pClient->connect(myDevice);
 	PrintLn(" - Connected to server");
 	if (!_connected) //sometimes peer device is disconnected before real connection is established. we need to delete BLEClient to close connection in bt stack
@@ -286,6 +285,7 @@ bool ConnectToServer()
 
 	if (!CheckSensorCharacteristic(pRemoteSensorService))
 	{
+		pClient->disconnect();
 		return false;
 	}
 
@@ -302,6 +302,7 @@ bool ConnectToServer()
 
 	if (!CheckControlCharacteristic(pRemoteControlService))
 	{
+		pClient->disconnect();
 		return false;
 	}
 
@@ -379,7 +380,7 @@ bool ValidateBLEData(Reading sensorData)
 		if (std::__cxx11::to_string(sensorData.temperature) != value)
 		{
 			PrintL("validated value for temperature value was: ");
-			PrintLn(value);
+			PrintLn(value.c_str());
 			return false;
 		}
 	}
@@ -394,7 +395,7 @@ bool ValidateBLEData(Reading sensorData)
 		if (std::__cxx11::to_string(sensorData.humidity) != value)
 		{
 			PrintL("validated value for humidity value was: ");
-			PrintLn(value);
+			PrintLn(value.c_str());
 			return false;
 		}
 	}
@@ -431,7 +432,7 @@ bool ValidateBLEData(Reading sensorData)
 		if (std::__cxx11::to_string(sensorData.lux) != value)
 		{
 			PrintL("validated value for lux value was: ");
-			PrintLn(value);
+			PrintLn(value.c_str());
 			return false;
 		}
 	}
@@ -461,10 +462,10 @@ class AdvertisedBLECallbacks : public BLEAdvertisedDeviceCallbacks
 	}
 };
 
-/// @brief Initializes the BLE device and starts scanning for advertised devices.
+/// @brief Initializes the BLE device and setup scanning for advertised devices.
 /// @note This function initializes the BLE device and configures the scanning parameters
 ///       before starting the scan for advertised BLE devices.
-void StartBLE()
+void SetupBLE()
 {
 	BLEDevice::init("");
 	esp_err_t errRc = esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_P9); // Set max level power BLE
@@ -574,14 +575,22 @@ void setup()
 	Sensor *sensor = new Sensor();
 	reading = sensor->getSensorData();
 
-	delete sensor;
+	delete sensor; 
+ 
+	PrintLn("Millis after sensor");
+	PrintLn(millis());
+ 
+	reading.humidity = 39.0f;
+	reading.temperature = 23.0f;
+	reading.lux = 123.0f;
+	reading.moisture = 45;
 
 	SetActiveMode();
 
-	PrintLn("Millis Startup");
+	PrintLn("Millis after Active mode");
 	PrintLn(millis());
 
-	StartBLE();
+	SetupBLE();
 
 	pinMode(buttonPin, INPUT);
 
@@ -601,10 +610,10 @@ void loop()
 
 	if (buttonState == true)
 	{
-		// Blink a LED here or something.
+		//Blink a LED here or something.
 		if (millis() > 5000)
 		{
-			// Do setup here.
+			//Do setup here.
 		}
 	}
 
