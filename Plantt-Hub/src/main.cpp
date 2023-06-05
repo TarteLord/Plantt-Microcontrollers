@@ -596,8 +596,8 @@ void loop()
 	}
 
 	//Send data to API, when no client is connected and 30 sec has passed or more than 5 readings is available.
-	if (clientConnected == false && currentAmountReadings >= 1 /* && ((esp_timer_get_time() / 1000) - millisOnApiPost) > 30000 
-		|| clientConnected == false && currentAmountReadings >= 5 */) //Se om problemet er det samme her
+	if (clientConnected == false && currentAmountReadings >= 1 && ((esp_timer_get_time() / 1000) - millisOnApiPost) > 30000 
+		|| clientConnected == false && currentAmountReadings >= 5)
 	{
 		TimeRTC *timeRTC = TimeRTC::GetInstance();
 		millisOnApiPost = timeRTC->GetEpochTime();
