@@ -7,6 +7,7 @@
 #include "preprocessors.h"
 #include "sensor.h"
 #include "tools.h"
+#include "config.h"
 
 //----------------------------------------------------------------------------------------------
 // The remote services we wish to connect to.
@@ -47,10 +48,16 @@ const int MAXREADINGS = 5;
 
 const int buttonPin = 32;
 int buttonState = 0;
+bool buttonActive = false;
+unsigned long buttonPressTimer = 0;
+unsigned long buttonReleaseTimer = 0;
+unsigned long pairingStartedTimer = 0;
+
 
 bool broadcastStarted = false;
 bool serverConnected = false;
 bool doConnect = false;
+bool setupComplete = false;
 
 int sensorID = 5;
 Reading reading = {};
@@ -572,13 +579,31 @@ void setup()
 
 	setModemSleep();
 
-	Sensor *sensor = new Sensor();
-	reading = sensor->getSensorData();
+	// Initiate the Config singleton
+	Config &config = Config::GetInstance();
 
-	delete sensor; 
+	if (config.sensorID != 0)
+	{
+		setupComplete = true;
+
+		//Get sensordata, if we have a sensorID
+		Sensor *sensor = new Sensor();
+		reading = sensor->getSensorData();
+
+		delete sensor; 
+
+	}
+	else 
+	{
+		setupComplete = false;
+		sensorID = 0;
+	}
+	
  
 	PrintLn("Millis after sensor");
 	PrintLn(millis());
+
+
 
 	SetActiveMode();
 
@@ -601,41 +626,94 @@ void setup()
 ///        writes data to the hub if the server is connected and able to write, and triggers hibernation based on timeout conditions.
 void loop()
 {
-	buttonState = digitalRead(GPIO_NUM_32);
+	int buttonState = digitalRead(buttonPin);
+	digitalWrite(BUILTIN_LED, LOW);
 
-	if (buttonState == true)
+	if (buttonState == HIGH && buttonActive == false)
 	{
-		//Blink a LED here or something.
-		if (millis() > 5000)
+		buttonActive = true;
+		buttonPressTimer = (esp_timer_get_time() / 1000);
+	}
+
+	if (buttonState == LOW && buttonActive == true)
+	{
+		buttonReleaseTimer = (esp_timer_get_time() / 1000);
+		unsigned long pressDuration = buttonReleaseTimer - buttonPressTimer;
+
+		if (pressDuration >= 10000) //10 seconds
 		{
-			//Do setup here.
+			longPressActive = true;
+		}
+		buttonActive = false;
+	}
+
+	if (longPressActive == true)
+	{
+		digitalWrite(BUILTIN_LED, HIGH);
+		broadcastStarted = false;
+		pairingModeActive = true;
+		pairingStartedTimer = (esp_timer_get_time() / 1000);
+		StopBLE();
+		StartWIFI();
+		int sensorID;
+
+		if (WiFi.status() == WL_CONNECTED)
+		{
+			sensorID = api->AddSensor();
+		}
+		PrintLn("sensorID:");
+		PrintLn(sensorID);
+		if (sensorID == 0)
+		{
+			PrintLn("Pairing API CALL failed.");
+			pairingModeActive = false;
+			digitalWrite(BUILTIN_LED, LOW);
+			delay(500);
+			digitalWrite(BUILTIN_LED, HIGH);
+			delay(500);
+			digitalWrite(BUILTIN_LED, LOW);
+			delay(500);
+			digitalWrite(BUILTIN_LED, HIGH);
+		}
+		
+
+		StopWIFI();
+		StartBLESensorPairing();
+
+		longPressActive = false;
+	}
+
+	if (setupComplete)
+	{
+		BLEScanResults foundDevices = pBLEScan->start(5, false);
+		PrintL("Devices found: ");
+		PrintLn(foundDevices.getCount());
+		PrintLn("Scan done!");
+		pBLEScan->clearResults(); // delete results from BLEScan buffer to release memory
+
+		WriteToHub();
+
+		if (millis() > 10000 && serverConnected == false) // 10s = 10000 ms. 1 min = 60000 ms.
+		{
+			PrintLn();
+			PrintLn("Goes into hibernation mode by timeout");
+			PrintLn("----------------------");
+			delay(100);
+			Hibernation();
+		}
+
+		if (millis() > 12000) // 12s = 12000 ms. 1 min = 60000 ms.
+		{
+			PrintLn();
+			PrintLn("Goes into hibernation mode by timeout");
+			PrintLn("----------------------");
+			delay(100);
+			Hibernation();
 		}
 	}
-
-	BLEScanResults foundDevices = pBLEScan->start(5, false);
-	PrintL("Devices found: ");
-	PrintLn(foundDevices.getCount());
-	PrintLn("Scan done!");
-	pBLEScan->clearResults(); // delete results from BLEScan buffer to release memory
-
-	WriteToHub();
-
-	if (millis() > 10000 && serverConnected == false) // 10s = 10000 ms. 1 min = 60000 ms.
+	else
 	{
-		PrintLn();
-		PrintLn("Goes into hibernation mode by timeout");
-		PrintLn("----------------------");
-		delay(100);
-		Hibernation();
-	}
-
-	if (millis() > 12000) // 12s = 12000 ms. 1 min = 60000 ms.
-	{
-		PrintLn();
-		PrintLn("Goes into hibernation mode by timeout");
-		PrintLn("----------------------");
-		delay(100);
-		Hibernation();
+		//Call setup here.
 	}
 
 	delay(150);

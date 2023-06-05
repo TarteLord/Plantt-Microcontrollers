@@ -29,6 +29,7 @@ public:
 	int PostReadingAPI(SensorData reading);
 	int PostReadingsAPI(SensorData *readings, int readingsAmount);
 	bool SetAccessToken();
+	int AddSensor();
 };
 
 #endif // API_H

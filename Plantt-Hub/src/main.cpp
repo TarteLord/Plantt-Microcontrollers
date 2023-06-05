@@ -37,6 +37,7 @@
 //----------------------------------------------------------------------------------------------
 #define CHARACTERISTICS_DONE_WRITING_UUID "8d45ef7f-57b5-48f1-bf95-baf39be3442d"
 #define CHARACTERISTICS_CURRENTDEVICE_UUID "960d74fe-b9c1-485f-ad3c-224a7e57a37f"
+#define CHARACTERISTICS_NEXT_SENSORID_UUID "4040b64a-57c6-483e-b32c-42aea8420842"
 
 //----------------------------------------------------------------------------------------------
 // Characteristics
@@ -47,6 +48,7 @@ BLECharacteristic *pCharacteristicMoisture;
 BLECharacteristic *pCharacteristicLux;
 BLECharacteristic *pCharacteristicDoneWriting;
 BLECharacteristic *pCharacteristicCurrentDevice;
+BLECharacteristic *pCharacteristicNextSensorID;
 
 //----------------------------------------------------------------------------------------------
 // Global variables
@@ -60,11 +62,18 @@ int currentAmountReadings = 0;
 
 bool broadcastStarted = false;
 bool clientConnected = false;
+bool pairingModeActive = false;
 
 int64_t millisOnLastDisconnect = 0;
 int64_t millisOnApiPost = 0;
 
 int postReadingsSuccessCount = 0;
+bool buttonActive = false;
+bool longPressActive = false;
+int buttonPin = GPIO_NUM_19;
+unsigned long buttonPressTimer = 0;
+unsigned long buttonReleaseTimer = 0;
+unsigned long pairingStartedTimer = 0;
 
 //----------------------------------------------------------------------------------------------
 // Code
@@ -248,6 +257,23 @@ bool ReadData()
 	return false;
 }
 
+/// @brief Stops the BLE server and deinitializes the BLE device.
+///
+/// This function stops the BLE server, deinitializes the BLE device, and introduces a small delay
+/// for cleanup purposes. It is used to gracefully shut down the BLE functionality when it is no
+/// longer needed.
+///
+/// @note This function should be called before shutting down the program or when BLE functionality
+/// is no longer required.
+///
+/// @see StartBLE()
+///
+void StopBLE()
+{
+	BLEDevice::deinit();
+	delay(100);
+}
+
 /// @brief Callbacks for BLE server events.
 class BLECallbacks : public BLEServerCallbacks
 {
@@ -289,9 +315,9 @@ class BLECallbacks : public BLEServerCallbacks
 void StartBLE()
 {
 	BLEDevice::init("Plantt");
-	esp_err_t errRc = esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT,ESP_PWR_LVL_P9); //Set max level power BLE
-	esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_P9); //Set max level power BLE
- 	esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_SCAN ,ESP_PWR_LVL_P9); //Set max level power BLE
+	esp_err_t errRc = esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_P9); // Set max level power BLE
+	esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_P9);						  // Set max level power BLE
+	esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_SCAN, ESP_PWR_LVL_P9);					  // Set max level power BLE
 	BLEServer *pServer = BLEDevice::createServer();
 	pServer->setCallbacks(new BLECallbacks());
 	BLEService *pServiceSensor = pServer->createService(SERVICE_SENSOR_UUID);
@@ -372,22 +398,9 @@ void StartBLE()
 	PrintLn("Characteristic defined! Now you can read it");
 }
 
-/// @brief Stops the BLE server and deinitializes the BLE device.
-///
-/// This function stops the BLE server, deinitializes the BLE device, and introduces a small delay
-/// for cleanup purposes. It is used to gracefully shut down the BLE functionality when it is no
-/// longer needed.
-///
-/// @note This function should be called before shutting down the program or when BLE functionality
-/// is no longer required.
-///
-/// @see StartBLE()
-///
-void StopBLE()
-{
-	BLEDevice::deinit();
-	delay(100);
-}
+
+
+
 
 /// @brief Stops the WiFi connection and turns off the WiFi mode.
 void StopWIFI()
@@ -474,12 +487,11 @@ void PostDataToAPI()
 
 			if (postReadingsSuccessCount == 10)
 			{
-				//There is a weird bug here, so this a quick and dirty fix.
-				//Suspect we have a memory issue
+				// There is a weird bug here, so this a quick and dirty fix.
+				// Suspect we have a memory issue
 				ESP.restart();
-				
 			}
-			
+
 			ClearReadings();
 		}
 		else
@@ -524,6 +536,8 @@ void setup()
 		Serial.begin(115200);
 		delay(1000);
 	}
+	pinMode(BUILTIN_LED, OUTPUT);
+	pinMode(buttonPin, INPUT);
 
 	// Initiate the Config singleton
 	Config &config = Config::GetInstance();
@@ -531,20 +545,11 @@ void setup()
 	// Only for debug, purposes
 	if (PRINT_ENABLED == true)
 	{
-		
-		PrintLn("config.ssid");
-		PrintLn(config.ssid);
-		PrintLn("config.password");
-		PrintLn(config.password);
-		PrintLn("config.identity");
-		PrintLn(config.identity);
-		PrintLn("config.secret");
-		PrintLn(config.secret);
 		// If config, is empty, lets just write some data.
 		if ((config.ssid[0] == '\0' &&
-			  config.password[0] == '\0' &&
-			  config.identity[0] == '\0' &&
-			  config.secret[0] == '\0'))
+			 config.password[0] == '\0' &&
+			 config.identity[0] == '\0' &&
+			 config.secret[0] == '\0'))
 		{
 			// This should be handled different, when there is a real pairing way implemented.
 			if (config.WriteConfig("May the WIFI be with you", "Abekat123", "O9HpT_OYWm2FbvVko7y32yy2", "uIrHT1U540GaaTM4sCefJjgS-kSn0neL3fK8k-QDyLijq1HCtCPAp7xVO7DUP-EW"))
@@ -572,7 +577,8 @@ void setup()
 
 		api = new API(config.identity, config.secret);
 	}
-	else {
+	else
+	{
 		PrintLn("Could not find wifi, restart Plantt-Hub");
 		ESP.restart();
 	}
@@ -588,6 +594,69 @@ void setup()
 /// @brief Main loop function that handles the Plantt Hub's main operations.
 void loop()
 {
+	int buttonState = digitalRead(buttonPin);
+	digitalWrite(BUILTIN_LED, LOW);
+
+	if (buttonState == HIGH && buttonActive == false)
+	{
+		buttonActive = true;
+		buttonPressTimer = (esp_timer_get_time() / 1000);
+	}
+
+	if (buttonState == LOW && buttonActive == true)
+	{
+		buttonReleaseTimer = (esp_timer_get_time() / 1000);
+		unsigned long pressDuration = buttonReleaseTimer - buttonPressTimer;
+
+		if (pressDuration >= 10000) //10 seconds
+		{
+			longPressActive = true;
+		}
+		buttonActive = false;
+	}
+
+	if (longPressActive == true)
+	{
+		digitalWrite(BUILTIN_LED, HIGH);
+		broadcastStarted = false;
+		pairingModeActive = true;
+		pairingStartedTimer = (esp_timer_get_time() / 1000);
+		StopBLE();
+		StartWIFI();
+		int sensorID;
+
+		if (WiFi.status() == WL_CONNECTED)
+		{
+			sensorID = api->AddSensor();
+		}
+		PrintLn("sensorID:");
+		PrintLn(sensorID);
+		if (sensorID == 0)
+		{
+			PrintLn("Pairing API CALL failed.");
+			pairingModeActive = false;
+			digitalWrite(BUILTIN_LED, LOW);
+			delay(500);
+			digitalWrite(BUILTIN_LED, HIGH);
+			delay(500);
+			digitalWrite(BUILTIN_LED, LOW);
+			delay(500);
+			digitalWrite(BUILTIN_LED, HIGH);
+		}
+		
+
+		StopWIFI();
+		StartBLESensorPairing(sensorID);
+
+		longPressActive = false;
+	}
+
+	if (pairingModeActive == true && (pairingStartedTimer - (esp_timer_get_time() / 1000)) >= 15000)
+	{
+		stopBLEPairing();
+	}
+	
+
 	if (!broadcastStarted || ((esp_timer_get_time() / 1000) - millisOnApiPost) > 30000)
 	{
 		PrintLn("Start advertising");
@@ -595,13 +664,14 @@ void loop()
 		broadcastStarted = true;
 	}
 
-	//Send data to API, when no client is connected and 30 sec has passed or more than 5 readings is available.
-	if (clientConnected == false && currentAmountReadings >= 1 /* && ((esp_timer_get_time() / 1000) - millisOnApiPost) > 30000 
-		|| clientConnected == false && currentAmountReadings >= 5 */) //Se om problemet er det samme her
+	// Send data to API, when no client is connected and 30 sec has passed or more than 5 readings is available.
+	if (clientConnected == false && currentAmountReadings >= 1 && pairingModeActive == false /* && ((esp_timer_get_time() / 1000) - millisOnApiPost) > 30000
+		|| clientConnected == false && currentAmountReadings >= 5 */
+		)													   // Se om problemet er det samme her
 	{
 		TimeRTC *timeRTC = TimeRTC::GetInstance();
 		millisOnApiPost = timeRTC->GetEpochTime();
-		
+
 		PrintLn("We got data to send");
 		PostDataToAPI();
 	}

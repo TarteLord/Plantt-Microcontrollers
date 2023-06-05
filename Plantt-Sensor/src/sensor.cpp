@@ -108,7 +108,6 @@ Reading Sensor::getSensorData()
 	TempAndHumidity tempHumReading = ReadTempAndHumidity();
 	if (tempHumReading.humidity == 0.0F || tempHumReading.temperature == 0.0F)
 	{
-
 		tempHumReading = ReadTempAndHumidity();
 	}
 

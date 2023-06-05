@@ -83,7 +83,7 @@ String API::GetAccessToken()
 	char hostHttp[38] = "http://www.plantt.dk/api/v1/hub/login";
 
 	char body[280] = "{\"identity\":";
-strcat(body, "\"");
+	strcat(body, "\"");
 	strcat(body, _identity);
 	strcat(body, "\"");
 	strcat(body, ",\"secret\":");
@@ -245,4 +245,57 @@ int API::PostReadingsAPI(SensorData *readings, int readingsAmount)
 	delete wifi;
 
 	return httpResponseCode;
+}
+
+int API::AddSensor() 
+{
+	if (!AccessTokenValid())
+	{
+		SetAccessToken();
+	}
+
+	int httpResponseCode = 0;
+	char hostHttp[43] = "http://www.plantt.dk/api/v1/hub/new-sensor";
+
+	char* body = "";
+	String response;
+
+	WiFiClient *wifi = new WiFiClientFixed();
+	HTTPClient http;
+	http.begin(*wifi, hostHttp);
+
+	http.addHeader("Content-Type", "application/json"); // Specify content-type header
+	char bearer[408] = "Bearer "; 
+	strcat(bearer, _accessToken);
+	http.addHeader("Authorization", bearer); // Specify bearer Authorization
+	httpResponseCode = http.POST(body);
+
+	if (httpResponseCode > 0)
+	{
+		PrintLn("httpResponseCode:");
+		PrintLn(httpResponseCode); // Print return code
+
+		if ((httpResponseCode >= 200 && httpResponseCode <= 204) || httpResponseCode == 307)
+		{
+			response = http.getString();
+			PrintLn("response:");
+			PrintLn(response); // Print request answer
+		}
+	}
+	else
+	{
+		PrintL("Error on sending POST: ");
+		PrintLn(httpResponseCode); // Print return code
+		response = "";
+	}
+
+	http.end(); // Free resources
+	delete wifi;
+
+	if (response == "")
+	{
+		return 0;
+	}
+	
+	return response.toInt();
 }
